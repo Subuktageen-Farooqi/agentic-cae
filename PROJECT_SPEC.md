@@ -1,6 +1,10 @@
 You are implementing a local prototype of an AI-assisted mechanical
 engineering design system.
 
+Solver decision updated by the user on 2026-10-26: all analysis requirements
+use FreeCAD FEM with Gmsh and CalculiX. The full product journey and verification
+requirements remain in scope; no commercial solver license is required.
+
 Treat this document as the authoritative implementation brief. The shared
 conversation provides context, but do not require the user to repeat decisions
 already specified here.
@@ -15,7 +19,7 @@ working functionality, and verify each integration with actual execution where
 the local environment permits.
 
 The goal is a small but complete end-to-end prototype that can be developed
-approximately within a day, assuming the necessary CAD software, Ansys license,
+approximately within a day, assuming the necessary CAD/FEM software,
 and LLM credentials are available.
 
 The one-day constraint limits initial geometry complexity and analysis coverage.
@@ -40,7 +44,7 @@ The application helps a user turn an initially vague mechanical design idea into
 6. A user-reviewed design with bounded revision attempts.
 7. A proposed and user-confirmed engineering analysis.
 8. A structured analysis specification.
-9. An actual Ansys analysis executed through PyAnsys/PyMechanical.
+9. An actual analysis executed through FreeCAD FEM, Gmsh and CalculiX.
 10. A report grounded in solver results.
 
 A central product feature is a RAG-assisted mechanical engineering conversation
@@ -90,7 +94,7 @@ Default implementation:
 - A replaceable RAG retriever interface.
 - CadQuery execution worker.
 - FreeCADCmd adapter.
-- PyMechanical adapter for Ansys Mechanical.
+- FreeCAD FEM Python API adapter with Gmsh meshing and CalculiX solving.
 - STL preview using trimesh and Plotly, or an equally lightweight viewer.
 - Markdown specifications and reports.
 
@@ -657,8 +661,8 @@ simple cantilever:
 
 Define selectors using position, orientation, and explicit tolerances.
 
-Resolve the selectors INSIDE Mechanical after importing the accepted STEP.
-Create named selections there.
+Resolve the selectors INSIDE FreeCAD FEM after importing the accepted STEP.
+Create labeled FEM constraints bound to the resolved faces there.
 
 Reject:
 - Zero matching faces.
@@ -675,11 +679,12 @@ Check imported geometry dimensions to catch unit scaling errors.
 All values passed across API boundaries require explicit unit handling.
 
 ==================================================
-18. REAL ANSYS EXECUTION
+18. REAL FREECAD FEM EXECUTION
 ==================================================
 
-Use PyMechanical, within the PyAnsys ecosystem, to control installed and licensed
-Ansys Mechanical.
+Use the FreeCAD FEM Python API through FreeCADCmd to import geometry, create
+the FEM analysis, mesh with Gmsh, and solve with installed CalculiX (ccx).
+No commercial solver license or separate Python solver-client package is required.
 
 Verify installed-version compatibility rather than blindly assuming the newest
 package is compatible.
@@ -688,7 +693,7 @@ Implement a fixed analysis template parameterized by AnalysisSpec.
 Do not have the LLM write arbitrary solver scripts.
 
 The real adapter must:
-1. Launch or connect to Mechanical.
+1. Launch or connect to FreeCAD FEM.
 2. Transfer/import the accepted STEP file.
 3. Verify geometry and units.
 4. Assign the specified verified material.
@@ -715,7 +720,7 @@ Initial outputs:
 Prevent stale results from being attached to a revised design.
 Bind every solve to geometry hash and analysis-spec version.
 
-If Ansys is absent, unavailable, or unlicensed:
+If FreeCAD FEM, Gmsh or CalculiX is absent, unavailable, or incompatible:
 - Show BLOCKED with a useful reason.
 - Preserve the rest of the workflow.
 - Do not fabricate numerical results.
@@ -853,7 +858,7 @@ rag/
 workers/
   cad_worker.py
   freecad_worker.py
-  mechanical_worker.py
+  fem_worker.py
 
 analysis/
   selectors.py
@@ -877,7 +882,7 @@ Keep UI, orchestration, LLM calls, and CAD/solver execution separate.
 ==================================================
 
 1. Inspect repository and local environment.
-   Identify Python, FreeCAD, Ansys, container runtime, and available credentials.
+   Identify Python, FreeCAD, FreeCAD FEM, container runtime, and available credentials.
    Inspect configuration without printing secrets.
 
 2. Create contracts, persistence, and workflow skeleton.
@@ -888,7 +893,7 @@ Keep UI, orchestration, LLM calls, and CAD/solver execution separate.
    -> STEP/STL
    -> FreeCAD API
    -> checks
-   -> Mechanical
+   -> FreeCAD FEM
    -> actual result extraction/report.
 
 4. Implement initial intake and both routes.
@@ -945,7 +950,7 @@ Analysis:
 - Import the accepted geometry.
 - Resolve and display actual selected regions.
 - Block missing inputs and ambiguous selections.
-- Perform a real static solve when Ansys is available.
+- Perform a real static solve when FreeCAD FEM is available.
 - Confirm report values match extracted solver values.
 - Reject stale results after geometry changes.
 
@@ -969,7 +974,7 @@ Provide:
 - Configuration example with no secrets.
 - Exact startup commands.
 - Knowledge-base ingestion/update command.
-- FreeCAD and Ansys executable-path configuration.
+- FreeCAD and FreeCAD FEM executable-path configuration.
 - Repeatable deterministic demo.
 - Repeatable assisted-design demo.
 - Actual verification outcomes.
@@ -1006,5 +1011,5 @@ materially consequential ambiguity cannot be resolved from the project.
 The final result should preserve the complete product journey:
 initial idea -> optional RAG engineering conversation -> structured brief
 -> design spec -> CadQuery -> FreeCAD model -> checks -> bounded feedback
--> accepted design -> analysis conversation/spec -> real Ansys execution
+-> accepted design -> analysis conversation/spec -> real FreeCAD FEM execution
 -> evidence-based report.

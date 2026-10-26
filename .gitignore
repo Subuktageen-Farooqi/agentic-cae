@@ -22,3 +22,5 @@ data/*.sqlite3*
 *.log
 .coverage
 htmlcov/
+build/
+dist/

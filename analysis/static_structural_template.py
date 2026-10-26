@@ -2,7 +2,7 @@
 
 LLM output may populate a validated AnalysisSpec. It never writes solver code.
 Actual face resolution, named selections, meshing, solve and extraction must be
-implemented inside the version-compatible Mechanical session adapter.
+implemented inside the version-compatible FreeCAD FEM session adapter.
 """
 
 from __future__ import annotations

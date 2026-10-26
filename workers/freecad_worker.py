@@ -7,8 +7,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
+import shutil
 
 from schemas import Artifact, ArtifactManifest, BoundingBox, GeometryMetrics, new_id
+from workers.process import run_owned
 
 
 FREECAD_ROLES = {"fcstd", "freecad_metrics", "freecad_log"}
@@ -37,19 +40,32 @@ def run_freecad_validation(*, freecad_cmd: str, project_id: str, job_id: str,
         raise FileExistsError("Revision FreeCAD outputs are immutable and cannot be overwritten")
 
     script = Path(__file__).with_name("freecad_script.py").resolve()
-    environment = os.environ.copy()
-    environment.update({"CAE_STEP_PATH": str(step_path), "CAE_FCSTD_PATH": str(fcstd),
-                        "CAE_FREECAD_METRICS_PATH": str(metrics_path)})
-    try:
-        process = subprocess.run([freecad_cmd, str(script)], text=True, capture_output=True,
-                                 timeout=timeout_seconds, env=environment, check=False)
-        log = f"exit_code={process.returncode}\n--- stdout ---\n{process.stdout}\n--- stderr ---\n{process.stderr}"
-    except BaseException as error:
-        log_path.write_text(f"FreeCAD invocation failed: {type(error).__name__}: {error}\n", encoding="utf-8")
-        raise
-    log_path.write_text(log, encoding="utf-8")
-    if process.returncode != 0:
-        raise RuntimeError(f"FreeCADCmd failed with exit code {process.returncode}; see {log_path}")
+    geometry_bytes = step_path.read_bytes()
+    geometry_hash = hashlib.sha256(geometry_bytes).hexdigest()
+    # FreeCAD's native STEP/FCStd IO does not consistently accept long Windows
+    # paths. Stage only this job's input and copy verified outputs back using
+    # Python's extended-path support; revision paths and hashes stay unchanged.
+    with tempfile.TemporaryDirectory(prefix="cae-freecad-") as temporary:
+        staging = Path(temporary)
+        staged_step, staged_fcstd, staged_metrics = staging / "model.step", staging / "model.FCStd", staging / "metrics.json"
+        staged_step.write_bytes(geometry_bytes)
+        environment = {**os.environ, "CAE_STEP_PATH": str(staged_step), "CAE_FCSTD_PATH": str(staged_fcstd),
+                       "CAE_FREECAD_METRICS_PATH": str(staged_metrics)}
+        try:
+            process = run_owned([freecad_cmd, str(script)], timeout=timeout_seconds, env=environment)
+            log = f"exit_code={process.returncode}\n--- stdout ---\n{process.stdout}\n--- stderr ---\n{process.stderr}"
+        except BaseException as error:
+            log_path.write_text(f"FreeCAD invocation failed: {type(error).__name__}: {error}\n", encoding="utf-8")
+            raise
+        log_path.write_text(log, encoding="utf-8")
+        if process.returncode != 0:
+            raise RuntimeError(f"FreeCADCmd failed with exit code {process.returncode}; see {log_path}")
+        for source, destination in [(staged_fcstd, fcstd), (staged_metrics, metrics_path)]:
+            if not source.is_file() or source.stat().st_size == 0:
+                raise RuntimeError("FreeCAD exited without all expected nonempty outputs")
+        for source, destination in [(staged_fcstd, fcstd), (staged_metrics, metrics_path)]:
+            with source.open("rb") as incoming, destination.open("xb") as outgoing:
+                shutil.copyfileobj(incoming, outgoing)
     if any(not path.is_file() or path.stat().st_size == 0 for path in (fcstd, metrics_path, log_path)):
         raise RuntimeError("FreeCAD exited without all expected nonempty outputs")
     try:
@@ -58,7 +74,8 @@ def run_freecad_validation(*, freecad_cmd: str, project_id: str, job_id: str,
         raise RuntimeError("FreeCAD completion metrics are unreadable") from error
     if raw.get("completed") is not True:
         raise RuntimeError("FreeCAD completion manifest did not confirm completion")
-    geometry_hash = hashlib.sha256(step_path.read_bytes()).hexdigest()
+    if hashlib.sha256(step_path.read_bytes()).hexdigest() != geometry_hash:
+        raise RuntimeError("Input STEP changed during FreeCAD validation")
     metrics = GeometryMetrics(
         revision_id=revision_id, geometry_hash=geometry_hash,
         step_import_succeeded=raw["step_import_succeeded"], shape_nonempty=raw["shape_nonempty"],

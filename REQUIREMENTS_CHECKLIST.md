@@ -1,6 +1,6 @@
 # Requirements traceability
 
-Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), read completely before implementation. IDs below reference its numbered sections. A location listed for pending work is a **planned implementation location**, not an existing or working integration. Verification describes the required method; actual evidence belongs in [STATUS.md](./STATUS.md). Status vocabulary: **pending**, **implemented**, **verified**, **blocked**. Implemented means code exists without sufficient execution evidence; blocked means an identified external dependency prevents verification/execution. No mocked boundary is evidence of a live integration.
+Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), updated for the user-approved FreeCAD FEM changeover on 2026-10-26. IDs below reference its numbered sections. A location listed for pending work is a **planned implementation location**, not an existing or working integration. Verification describes the required method; actual evidence belongs in [STATUS.md](./STATUS.md). Status vocabulary: **pending**, **implemented**, **verified**, **blocked**. Implemented means code exists without sufficient execution evidence; blocked means an identified external dependency prevents verification/execution. No mocked boundary is evidence of a live integration.
 
 ## Local software, credentials and licenses
 
@@ -11,20 +11,20 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), read completely before implemen
 | DEP-03 | CadQuery in isolated execution environment | `workers/cad_worker.py`, `workers/Dockerfile` | Real STEP/STL with valid manifest and measured solid | blocked |
 | DEP-04 | Docker or equivalent no-network/resource-limited runtime | `config.py`, `workers/runtime.py` | Probe daemon; enforce mounts, limits, user and no-network | blocked |
 | DEP-05 | Installed FreeCADCmd supplied Python/API, explicit executable path | `config.py`, `workers/freecad_worker.py` | Actual STEP import, metrics, FCStd and completion manifest | verified |
-| DEP-06 | Installed/version-compatible Ansys Mechanical | `config.py`, `workers/mechanical_worker.py` | Version probe, launch/connect, actual import and solve | blocked |
-| DEP-07 | Valid Mechanical license / reachable license server | `workers/mechanical_worker.py` | Licensed launch and completed actual static solve | blocked |
-| DEP-08 | Version-compatible PyMechanical | `pyproject.toml`, `workers/mechanical_worker.py` | Match installed Mechanical compatibility and run template | blocked |
+| DEP-06 | Installed/version-compatible FreeCAD FEM FreeCAD FEM | `config.py`, `workers/fem_worker.py` | Version probe, launch/connect, actual import and solve | verified |
+| DEP-07 | Installed CalculiX ccx; no commercial license | `config.py`, `workers/fem_worker.py` | Actual ccx version and completed static solve | verified |
+| DEP-08 | Installed Gmsh and compatible FreeCAD FEM API | `config.py`, `workers/fem_worker.py` | Actual tetrahedral mesh and fixed API template | verified |
 | DEP-09 | Vertex project, location, vision Gemini model ID and ADC permissions | `.env.example`, `config.py`, `providers/vertex.py` | Current official SDK/model docs; ADC live vision/text request; never print secrets | blocked |
 | DEP-10 | Local embedding package/model cache | `rag/ingest.py`, `rag/retriever.py` | Local index build and semantic query; honest lexical fallback | implemented |
 | DEP-11 | Writable local SQLite/artifact storage | `storage.py`, `config.py` | Atomic/recovery/concurrent persistence tests | verified |
 
-Initial discovery: no real Python in PATH (Store alias only); no FreeCAD, Ansys, container or gcloud in inspected paths; configured variables/standard ADC absent. Nonstandard installations can be supplied later. Do not request credentials in chat or log their values.
+Current PC: Python 3.12.13 and all four locked extras are installed; portable FreeCAD 1.1.4, Gmsh 4.15.0 and CalculiX 2.22 have completed a real deterministic solve. Docker/Podman and Vertex project/location/model/ADC remain unavailable. Historical evidence and remaining limitations are in STATUS.md. Never request credentials in chat or log their values.
 
 ## Product, scope and architecture (§§1–3)
 
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
-| 01-01 | Full idea → informed brief → spec → CadQuery → FreeCAD → checks → review → analysis/spec → actual Ansys → grounded report journey | `workflow.py`, `app.py`, `examples/` | Complete assisted and deterministic demos using real boundaries | pending |
+| 01-01 | Full idea → informed brief → spec → CadQuery → FreeCAD → checks → review → analysis/spec → actual FreeCAD FEM → grounded report journey | `workflow.py`, `app.py`, `examples/` | Complete assisted and deterministic demos using real boundaries | pending |
 | 01-02 | RAG engineering conversation before generation present from first version | `agents/advisor.py`, `rag/`, `app.py` | Cited recommendation and brief update before CAD | pending |
 | 02-01 | One connected solid; prismatic extrusions, holes, cuts, unions, basic fillets | `schemas.py`, `agents/cad_creator.py`, `rules/geometry.py` | Real geometry examples; multiple-solid rejection | pending |
 | 02-02 | One real linear static analysis; deterministic cantilever and assisted bracket/support demo | `analysis/static_structural_template.py`, `examples/` | Run both demos; real solve where installed | pending |
@@ -86,17 +86,17 @@ Initial discovery: no real Python in PATH (Store alias only); no FreeCAD, Ansys,
 | 08-04 | DesignSpec schema/brief versions, name/purpose, units/coordinates, dimensions/features | `schemas.py:DesignSpec` | Required fields and positive parameter validation | verified |
 | 08-05 | Stable hard/soft IDs, verification methods, material/manufacturing intent, images, assumptions/questions | `schemas.py:DesignSpec` | ID uniqueness and preservation on revision | implemented |
 | 08-06 | Every dimension records user-provided/inferred/accepted values | `schemas.py:Dimension` | Reject missing provenance and inconsistent accepted values | verified |
-| 08-07 | design_spec.json and deterministic Markdown from validated JSON | `agents/spec_writer.py`, `reporting.py` | Render same validated fixture and compare outputs | pending |
+| 08-07 | design_spec.json and deterministic Markdown from validated JSON | `agents/spec_writer.py`, `reporting.py` | Render same validated fixture and compare outputs | verified |
 | 08-08 | Immutable original intake separate from approved brief versions | `storage.py` | Mutation attempts fail; approved snapshot reloads separately | verified |
 
 ## CAD execution and FreeCAD (§§9–10)
 
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
-| 09-01 | CAD role receives spec, reference image content, accepted decisions, prior code/feedback or technical errors | `agents/cad_creator.py`, `agents/revision_writer.py` | Captured input tests and live generation when available | pending |
-| 09-02 | Restricted build(params) function; trusted worker owns imports/params/invocation/export/error/log/manifest | `workers/cad_worker.py`, `workers/runtime.py` | Allowed/disallowed source tests and actual worker execution | pending |
+| 09-01 | CAD role receives spec, reference image content, accepted decisions, prior code/feedback or technical errors | `agents/cad_creator.py`, `agents/revision_writer.py` | Captured input tests and live generation when available | implemented |
+| 09-02 | Restricted build(params) function; trusted worker owns imports/params/invocation/export/error/log/manifest | `workers/cad_worker.py`, `workers/runtime.py` | Allowed/disallowed source tests and actual worker execution | implemented |
 | 09-03 | Generated code cannot control infrastructure, secrets, files, shell or network; real isolation with no-network/no-secrets/non-root/minimal mounts/CPU-memory-time limits | `workers/Dockerfile`, `workers/runtime.py` | Container configuration inspection and adversarial execution tests | blocked |
-| 09-04 | Never call subprocess or blacklist a security sandbox | `workers/runtime.py`, `README.md` | Documentation and execution-path review | pending |
+| 09-04 | Never call subprocess or blacklist a security sandbox | `workers/runtime.py`, `README.md` | Documentation and execution-path review | verified |
 | 09-05 | CadQuery produces model.step, preview.stl, model.py, parameters.json, metadata and logs | `workers/cad_worker.py`, `schemas.py:ArtifactManifest` | Real exports and content/hash/completion checks | verified |
 | 10-01 | FreeCADCmd API imports STEP, creates document, validates shape, saves actual model.FCStd | `workers/freecad_worker.py` | Real import/save/reopen with installed FreeCAD | verified |
 | 10-02 | FCStd is imported geometry; CadQuery remains parametric source; no native feature-tree claim | `app.py`, `README.md` | User labels and actual document inspection | implemented |
@@ -117,7 +117,7 @@ Initial discovery: no real Python in PATH (Store alias only); no FreeCAD, Ansys,
 
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
-| 12-01 | Technical repair triggered by execution/mandatory failure, receives real traceback/checks, max one per generated revision; exhausted stage exposes real error | `workflow.py`, `agents/cad_creator.py` | Failure capture and bounded-repair tests | pending |
+| 12-01 | Technical repair triggered by execution/mandatory failure, receives real traceback/checks, max one per generated revision; exhausted stage exposes real error | `workflow.py`, `agents/cad_creator.py` | Failure capture and bounded-repair tests | verified |
 | 12-02 | Separate repair/rejection counters; max two user rejections; initial plus one feedback regeneration; no unbounded loop | `workflow.py`, `storage.py` | Counter and per-attempt/revision tests | pending |
 | 13-01 | Interactive actual preview; params/spec/assumptions/rules/coverage/CAD downloads | `app.py` | Real STL display and download hashes | pending |
 | 13-02 | Accept/revise/thumb controls, feedback text/images, explicit submit | `app.py`, `schemas.py:DesignFeedback` | UI paths and feedback contract tests | pending |
@@ -138,28 +138,28 @@ Initial discovery: no real Python in PATH (Store alias only); no FreeCAD, Ansys,
 | 15-02 | Recommendations name/question/relevance/inputs/supported flag | `schemas.py:AnalysisRecommendation`, `agents/analysis_planner.py` | Complete validated recommendations | pending |
 | 15-03 | Execute linear static only; identify modal/random vibration/fatigue/transient/other as unsupported | `schemas.py`, `agents/analysis_planner.py` | Unsupported analysis requests never reach solver | pending |
 | 15-04 | No invented spectra/S-N curves/damping/histories/mounts; static does not prove fatigue/vibration life | `agents/analysis_planner.py`, `reporting.py` | Missing-input and scope-limitation tests | pending |
-| 16-01 | analysis_spec.json and deterministic Markdown | `reporting.py`, `agents/analysis_planner.py` | Same validated source produces both | pending |
+| 16-01 | analysis_spec.json and deterministic Markdown | `reporting.py`, `examples/fem_demo.py` | Same validated source produces both | verified |
 | 16-02 | Schema/spec version, accepted revision/hash, type/question, material ID/source and explicit units | `schemas.py:AnalysisSpec` | Required-field, unit and binding validation | verified |
 | 16-03 | Supports/loads/selectors/mesh/outputs/acceptance/assumptions/missing/supported status | `schemas.py:AnalysisSpec` | Complete/incomplete/unsupported contract cases | verified |
-| 16-04 | Sufficient material/load/support before execution; verified small material allowlist; no brief contradiction | `analysis/materials.py`, `workflow.py` | Material-source and missing-input gate tests | pending |
-| 16-05 | Proposed setup and actual selected regions shown; explicit input confirmation; automatic CAD route never authorizes analysis defaults | `app.py`, `workflow.py` | Confirm-before-solve and invalidation tests | pending |
+| 16-04 | Sufficient material/load/support before execution; verified small material allowlist; no brief contradiction | `analysis/materials.py`, `workflow.py` | Material-source and missing-input gate tests | implemented |
+| 16-05 | Proposed setup and actual selected regions shown; explicit input confirmation; automatic CAD route never authorizes analysis defaults | `app.py`, `workflow.py` | Confirm-before-solve and invalidation tests | implemented |
 
-## Selectors and Mechanical (§§17–18)
+## Selectors and FreeCAD FEM (§§17–18)
 
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
 | 17-01 | No face IDs across revisions; min/max-X planar selectors with position/orientation/tolerances | `schemas.py:RegionSelector`, `analysis/selectors.py` | Contract and deterministic geometric matching tests | verified |
-| 17-02 | Resolve in Mechanical after import; create named selections; reject zero/ambiguous/invalid/overlapping regions | `analysis/static_structural_template.py` | Actual imported-face matching and invalid-region tests | blocked |
-| 17-03 | Display actual selected regions before solving, not textual selectors | `workers/mechanical_worker.py`, `app.py` | Real region images/geometry preview before confirmation | blocked |
-| 17-04 | Check imported dimensions for scaling; explicit units on every API boundary | `analysis/selectors.py`, `analysis/static_structural_template.py` | mm/m geometry scaling and force/stress unit tests | implemented |
-| 18-01 | PyMechanical controls installed licensed Mechanical; verify installed-version compatibility | `workers/mechanical_worker.py`, `config.py` | Real version/launch/license probe | blocked |
-| 18-02 | Fixed parameterized AnalysisSpec template, never arbitrary LLM solver scripts | `analysis/static_structural_template.py` | Template review and invalid input tests | implemented |
-| 18-03 | Launch/connect, transfer/import exact accepted STEP, verify geometry/units, assign verified material | `workers/mechanical_worker.py`, `analysis/static_structural_template.py` | Actual session/import/material evidence | blocked |
-| 18-04 | Resolve support/load, mesh, BCs/loads, requested results, solve and check actual completion/errors | `analysis/static_structural_template.py` | Actual solver completion and negative solve evidence | blocked |
-| 18-05 | Extract results, images/logs, save project when supported, clean up owned sessions | `workers/mechanical_worker.py` | Actual files, data, session cleanup tests | blocked |
-| 18-06 | Max displacement, max von Mises, reaction forces, mesh data, status, contours/logs | `schemas.py:AnalysisResults`, `workers/mechanical_worker.py` | Actual numeric extraction and manifest verification | blocked |
+| 17-02 | Resolve in FreeCAD FEM after import; create labeled FEM constraints; reject zero/ambiguous/invalid/overlapping regions | `workers/fem_script.py`, `analysis/static_structural_template.py` | Actual imported-face matching and invalid-region tests | verified |
+| 17-03 | Display actual selected regions before solving, not textual selectors | `workers/fem_worker.py`, `app.py` | Real region images/geometry preview before confirmation | implemented |
+| 17-04 | Check imported dimensions for scaling; explicit units on every API boundary | `analysis/selectors.py`, `analysis/static_structural_template.py` | mm/m geometry scaling and force/stress unit tests | verified |
+| 18-01 | FreeCAD FEM Python API controls installed FreeCAD FEM with CalculiX; verify installed-version compatibility | `workers/fem_worker.py`, `config.py` | FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 real solve | verified |
+| 18-02 | Fixed parameterized AnalysisSpec template, never arbitrary LLM solver scripts | `analysis/static_structural_template.py` | Template review and invalid input tests | verified |
+| 18-03 | Launch/connect, transfer/import exact accepted STEP, verify geometry/units, assign verified material | `workers/fem_worker.py`, `analysis/static_structural_template.py` | Actual session/import/material evidence | verified |
+| 18-04 | Resolve support/load, mesh, BCs/loads, requested results, solve and check actual completion/errors | `analysis/static_structural_template.py` | Actual solver completion and negative solve evidence | verified |
+| 18-05 | Extract results, images/logs, save project when supported, clean up owned sessions | `workers/fem_worker.py` | Actual files, data, session cleanup tests | verified |
+| 18-06 | Max displacement, max von Mises, reaction forces, mesh data, status, contours/logs | `schemas.py:AnalysisResults`, `workers/fem_worker.py` | Actual numeric extraction and manifest verification | implemented |
 | 18-07 | Every run bound to geometry hash/spec version; reject stale results | `schemas.py`, `storage.py`, `workflow.py` | Changed-geometry/spec stale-result tests | verified |
-| 18-08 | Absent/unlicensed/incompatible solver shows useful BLOCKED; preserve workflow; no fabricated or silently mocked solver | `workers/mechanical_worker.py`, `app.py` | Missing-path/license failure tests and no fake numbers | verified |
+| 18-08 | Absent/incompatible solver shows useful BLOCKED; preserve workflow; no fabricated or silently mocked solver | `workers/fem_worker.py`, `app.py` | Missing-path/solver failure tests and no fake numbers | verified |
 
 ## Reporting (§19)
 
@@ -194,14 +194,18 @@ Initial discovery: no real Python in PATH (Store alias only); no FreeCAD, Ansys,
 | 23-02 | Actual image through vision and preserved through restart | `tests/`, `examples/` | Live Gemini image response plus persisted-byte hash | blocked |
 | 23-03 | Actual model/export/FreeCAD/preview; failed build; repair budget; scaffold NOT_IMPLEMENTED | `tests/`, `examples/cantilever.py` | Execute deterministic CAD demo and negative cases | blocked |
 | 23-04 | First revision, second failure, three restarts, artifact-bound acceptance | `tests/test_feedback.py` | Complete feedback/restart integration cases | pending |
-| 23-05 | Accepted geometry import/actual face display; missing/ambiguous rejection; real solve/report equality/stale result rejection | `tests/`, `examples/cantilever.py` | Real Mechanical demo and failure tests | blocked |
+| 23-05 | Accepted geometry import/actual face display; missing/ambiguous rejection; real solve/report equality/stale result rejection | `tests/`, `examples/cantilever.py` | Real FreeCAD FEM demo and failure tests | implemented |
 | 23-06 | Reload session after application restart; no duplicate frontend jobs | `tests/test_storage.py`, `tests/test_app.py` | SQLite restart and Streamlit rerun tests | pending |
 | 23-07 | Matching-assumption beam-theory displacement and force equilibrium; no overinterpreted constrained peak stress | `analysis/sanity.py`, `reporting.py`, `tests/` | Real solver versus analytical estimate with explicit tolerance | blocked |
 | 24-01 | Source/dependency setup/tested versions/config without secrets/exact startup | `README.md`, `pyproject.toml`, `.env.example` | Clean-environment documented commands and version evidence | implemented |
-| 24-02 | KB update command, FreeCAD/Ansys paths, deterministic and assisted demos | `README.md`, `examples/`, `config.py` | Run each documented command, record actual outcomes | pending |
+| 24-02 | KB update command, FreeCAD/FreeCAD FEM paths, deterministic and assisted demos | `README.md`, `examples/`, `config.py` | Run each documented command, record actual outcomes | implemented |
 | 24-03 | Truthful verified/unverified/blocked/planned distinctions, known limitations and actual evidence; no complete-product claim with blocked solver | `STATUS.md`, `REQUIREMENTS_CHECKLIST.md`, `README.md`, `app.py` | Audit claims against recorded executions | pending |
 | 24-04 | Google Vertex vision Gemini for advisor/spec/CAD/revision/analysis/report; ADC/configurable project/location/model; current SDK/model availability verified; replaceable provider | `providers/vertex.py`, `config.py`, `agents/`, `.env.example` | Official docs/SDK check before implementation; live configured-role calls | blocked |
 | 24-05 | Local embeddings initially, no OpenAI dependency/key; proceed reasonably and ask only unresolved external/consequential blockers | `rag/`, `pyproject.toml`, `PLAN.md` | Dependency/config review and local index execution | verified |
 | PROC-01 | Create these four records before implementation; ordered testable milestones with behavior/verification/manual check | `PLAN.md`, `STATUS.md`, `BACKLOG.md`, `REQUIREMENTS_CHECKLIST.md` | Inspect records created before application source | verified |
 | PROC-02 | Update records at each boundary, five-point report, exact resume step; reread relevant spec on new milestone/compaction | `STATUS.md`, `PLAN.md` | Boundary evidence and resumption instructions | implemented |
 | PROC-03 | No silent requirement removal/scope changes; unrelated improvements in backlog; no mock/scaffold success claims | All four project records | Traceability/evidence review each milestone | implemented |
+
+## Current verification boundary
+
+The real deterministic FEM path is verified. Region preview/confirmation is available through the CLI; application analysis intake/review remains M8. Exported images currently show actual nodal displacement/stress fields; smooth contour/postprocessing controls remain unverified. M6 specification/source/repair/job behavior is tested with labeled provider/container doubles; actual Vertex and generated-code container execution remain blocked. The full assisted journey is still pending.

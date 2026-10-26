@@ -19,10 +19,10 @@ llm = ["google-genai>=1.0,<2"]
 agentic-cae = "cli:main"
 
 [tool.setuptools]
-py-modules = ["schemas", "storage", "workflow", "config", "cli"]
+py-modules = ["schemas", "storage", "workflow", "config", "cli", "app", "app_logic", "reporting", "generation"]
 
 [tool.setuptools.packages.find]
-include = ["workers*", "rules*", "examples*", "rag*", "agents*", "providers*"]
+include = ["workers*", "rules*", "examples*", "rag*", "agents*", "providers*", "analysis*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

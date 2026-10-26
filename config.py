@@ -24,9 +24,11 @@ class Config:
     gemini_model_id: str | None
     adc_path: Path | None
     freecad_cmd: str | None
-    mechanical_exe: str | None
+    calculix_exe: str | None
+    gmsh_exe: str | None
     container_runtime: str
     worker_timeout_seconds: int
+    cad_image: str = "agentic-cae-cad:2.6.1"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -54,15 +56,29 @@ class Config:
             for parent in (Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
                            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))):
                 candidates.extend(parent.glob("FreeCAD */bin/freecadcmd.exe"))
+            candidates.extend(Path(__file__).parent.glob(".tools/freecad/**/freecadcmd.exe"))
             if candidates:
-                freecad = str(sorted(candidates, reverse=True)[0])
+                freecad = str(max(candidates, key=lambda p: (p.parent.name.lower() == "bin", str(p))))
+
+        def companion(key: str, name: str) -> str | None:
+            configured = text(key)
+            if configured:
+                return configured
+            if freecad:
+                for parent in (Path(freecad).parent, Path(freecad).parent / "bin"):
+                    candidate = parent / (name + (".exe" if os.name == "nt" else ""))
+                    if candidate.is_file():
+                        return str(candidate)
+            return shutil.which(name)
         return cls(
             data_dir=Path(text("CAE_DATA_DIR") or "data"),
             google_project=text("GOOGLE_CLOUD_PROJECT"),
             google_location=text("GOOGLE_CLOUD_LOCATION"),
             gemini_model_id=text("GEMINI_MODEL_ID"), adc_path=adc_path,
-            freecad_cmd=freecad, mechanical_exe=text("ANSYS_MECHANICAL_EXE"),
+            freecad_cmd=freecad, calculix_exe=companion("CALCULIX_CCX", "ccx"),
+            gmsh_exe=companion("GMSH_EXE", "gmsh"),
             container_runtime=runtime, worker_timeout_seconds=timeout,
+            cad_image=text("CAE_CAD_IMAGE") or "agentic-cae-cad:2.6.1",
         )
 
 
@@ -83,15 +99,17 @@ def diagnostics(config: Config) -> dict:
     return {
         "python": {"version": platform.python_version(), "status": "verified_runtime"},
         "packages": {name: _version(name) for name in (
-            "pydantic", "pytest", "streamlit", "cadquery", "ansys-mechanical-core",
+            "pydantic", "pytest", "streamlit", "cadquery",
             "google-genai", "sentence-transformers", "trimesh", "plotly")},
         "freecad": {
             "executable_found": _executable(config.freecad_cmd, ("FreeCADCmd", "FreeCADCmd.exe", "freecadcmd")),
-            "execution": "unverified", "note": "Supplied interpreter/API import and save have not been run",
+            "execution": "unverified", "note": "This presence-only probe does not execute FreeCAD; see STATUS.md for integration evidence",
         },
-        "mechanical": {
-            "executable_found": _executable(config.mechanical_exe, ("AnsysWBU.exe", "ansyswbu")),
-            "execution": "unverified", "license": "unverified", "version_compatibility": "unverified",
+        "fem": {
+            "backend": "FreeCAD FEM / CalculiX",
+            "calculix_found": _executable(config.calculix_exe, ("ccx",)),
+            "gmsh_found": _executable(config.gmsh_exe, ("gmsh",)),
+            "execution": "unverified", "version_compatibility": "unverified",
         },
         "container": {"executable_found": _executable(config.container_runtime, ()),
                       "daemon_and_isolation": "unverified"},

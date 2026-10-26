@@ -215,7 +215,7 @@ def test_job_completion_requires_current_owner_and_error_evidence(store, project
         store.finish(job.job_id, "other", JobStatus.SUCCEEDED)
     with pytest.raises(ValueError):
         store.finish(job.job_id, "worker", JobStatus.BLOCKED)
-    done = store.finish(job.job_id, "worker", JobStatus.BLOCKED, error="Mechanical executable not found")
+    done = store.finish(job.job_id, "worker", JobStatus.BLOCKED, error="FreeCAD FEM executable not found")
     assert done.status == JobStatus.BLOCKED and "not found" in done.error
     assert store.enqueue(project, "solver:v1", "solver", {}).job_id == job.job_id
     assert store.claim(job.job_id, "worker") is None

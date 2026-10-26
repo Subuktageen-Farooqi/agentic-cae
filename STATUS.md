@@ -1,85 +1,70 @@
 # Project status
 
-Updated: 2026-10-26. Current milestone: **M6 — specification and generated CAD (next)**.
+Updated: 2026-10-26. Current boundary: **M6 implemented and locally tested; live Vertex and generated-code container execution blocked. Next independent milestone: M7.**
 
-## Authority and repository baseline
+## Authority and continuity
 
-- Read the complete [PROJECT_SPEC.md](./PROJECT_SPEC.md), 1,010 lines, before implementation. No scope changes authorized or made.
-- Initial repository: README, MIT license, git metadata, user-supplied untracked specification. No application or tests. Preserve original specification.
-- See [PLAN.md](./PLAN.md) for ordered milestones and [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md) for traceability. Unrelated ideas belong in [BACKLOG.md](./BACKLOG.md).
+- The existing implementation was preserved. The user authorized four advisor/dependency fixes and replacement of the solver backend with **FreeCAD FEM + Gmsh + CalculiX**. All current/future solver requirements in [PROJECT_SPEC.md](./PROJECT_SPEC.md), [PLAN.md](./PLAN.md), [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md), [BACKLOG.md](./BACKLOG.md) and [AGENTS.md](./AGENTS.md) use this backend. No commercial solver license/client is required.
+- This change set continues from Git baseline `26d842a`; no database reset or history rewrite was performed. Existing contracts and schema-version-1 SQLite records remain readable; new contract fields have defaults. Historical intake, brief versions, attempts and artifacts remain immutable.
+- The requested AGENTS.md was absent on arrival. It now records continuity, the solver decision, execution boundaries and the native Windows path constraint.
 
-## Cross-PC handoff snapshot
+## Current PC and setup
 
-- Intended Git state: source, tests, project/specification records, four authored knowledge sources, knowledge index, dependency manifests/lockfile and secret-free configuration example.
-- Completed: M1 contracts/persistence/workflow verified; M2 actual CadQuery 2.6.1 and FreeCADCmd/API 1.1.4 verified; M3 offline analysis/reporting verified while Mechanical is blocked; M4 Streamlit intake/routes verified; M5 local RAG/living brief verified while live Vertex is blocked.
-- Current problems: no Docker/Podman generated-code sandbox; no Ansys installation/license/PyMechanical compatibility; no configured Vertex project/location/model/ADC; no live Gemini image interpretation; no actual solver regions/solve; M6 has not started.
-- Latest verification: **116 tests passed** in 20.68 s on Python 3.12.12. Actual CadQuery/FreeCAD integration tests ran. `git diff --check` passed. Secret filename/content scans found no credential file or recognized private-key/API-token pattern in the intended tree. No intended Git file exceeded 1 MiB; the largest is `uv.lock` at 299,937 bytes.
-- Exact next action: clone/pull this handoff commit, recreate all four extras (`test,cad,ui,llm`), run `python -m cli knowledge-update` and `python -m pytest -q`, reread §§8–12 and 23–24 of [PROJECT_SPEC.md](./PROJECT_SPEC.md), then begin M6 deterministic DesignSpec JSON/Markdown and generated-CAD validation. Never execute generated code outside the required container boundary.
+- Restored all four locked extras (`test,cad,ui,llm`) with `uv sync --python 3.12 --frozen --extra test --extra cad --extra ui --extra llm`.
+- Actual runtime: Python 3.12.13; Pydantic 2.14.1; pytest 9.1.1; CadQuery 2.6.1; Streamlit 1.66.1; google-genai 1.75.0; trimesh 4.12.2; Plotly 6.9.0. `.python-version` selects the tested 3.12 series. Portable tools and environments are ignored by Git.
+- Downloaded official FreeCAD 1.1.4 portable Windows archive, verified release SHA-256 `4828741fc91ee37fafcdb97a1abacb18b04ba451ac4372d9ff7a7349b36f4d6d`, and extracted under `.tools/freecad/`. Its supplied Python API, Gmsh 4.15.0 and CalculiX 2.22 ran successfully. Discovery prefers `bin/freecadcmd.exe` and finds adjacent mesher/solver binaries; explicit `FREECAD_CMD`, `GMSH_EXE`, `CALCULIX_CCX` overrides remain available.
+- Missing: Docker/Podman engine and built CAD container image; Vertex project/location/model process configuration and ADC. No live Gemini request, vision interpretation or generated-code container execution is claimed. Google Cloud CLI was not found; authenticate locally before live verification.
+- The configurable model example is now `gemini-3.8-flash`. Official Google lifecycle/model and SDK documentation was checked on 2026-10-26; the former `gemini-2.5-flash` example retired on 2026-10-20. Project-specific model access/quality/cost remain unverified. References are linked in [README.md](./README.md).
 
-### Not stored in Git
+## Four review fixes: implemented and regression-tested
 
-- Credentials/secrets: none found in this repository. `.env`, Streamlit secrets, ADC JSON, PEM/key/P12/PFX files are ignored. Authenticate ADC independently on the next PC.
-- Local database: ignored `data/workflow.sqlite3`, 106,496 bytes. It contains local session/job/state records and is unnecessary for a fresh start.
-- Local artifacts: ignored `data/projects/4a4fb88dcc2947e88341886714d07f58/`, 12 files totaling 29,739 bytes. It contains deterministic demo intake/brief, STEP, STL, FCStd, CadQuery source, parameters, metadata, metrics, summary and logs. Copy separately only to preserve that exact evidence bundle.
-- Uploaded images: no persistent uploaded-image file currently exists under workspace `data/projects/`; future uploads remain local there by default.
-- Local environments/caches: `.venv/`, `.tools/`, `.pytest_cache/`, bytecode and package metadata are ignored and must be recreated.
-- Installed software: project-local Python 3.12.12 environment and system FreeCAD 1.1.4. Git is required. Google Cloud CLI supports the documented ADC command. Docker/Podman and Ansys were absent.
-- External access/licenses: GitHub credentials for pushing; Google Cloud project/Vertex permissions/credits/ADC for Gemini; Ansys Mechanical installation and license for the real solver.
+1. Advisor requests load persisted intake/prior-chat image bytes referenced by the current brief, including after reopening a session; role labels are preserved.
+2. Explicit dimension edits update the versioned structured dimensions without a model call. Typed advisor patches update supported engineering fields and resolved questions while preserving identity/requirements and unaffected dimensions. Stale edits still use optimistic concurrency.
+3. Vertex client construction/authentication and request failures share the ProviderUnavailable boundary. SDK calls have bounded timeouts; owned clients are closed.
+4. The previous nested-package probe failure was removed with the old solver adapter. The FEM boundary checks executable presence without importing a nonexistent solver-client package and returns BLOCKED without numerical results when dependencies are missing.
 
-## M1 boundary — contracts, persistence and orchestration: verified
+## Solver changeover: real deterministic path verified
 
-- What works: strict required contracts; immutable intake/images; append-only versioned records/audit; optimistic concurrency; idempotent single-claim jobs; explicit interrupted-job recovery; no-clobber integrity-checked artifacts; secret-free diagnostics.
-- Actual verification: Python 3.12.12, Pydantic 2.14.1, pytest 9.1.1. **77 tests passed** using real temporary SQLite/files, actual PNG bytes, concurrent claims/edits, restart, tamper, stale-action and interruption cases. CLI diagnostics/help/projects and `git diff --check` passed.
-- Blocked/unverified: M1 made no UI, LLM, RAG, CAD or solver claim.
-- Manual check: review [.env.example](./.env.example) and [README.md](./README.md) persistence/recovery behavior.
-- Next milestone selected: M2 deterministic CadQuery/FreeCAD integration.
+- Fixed trusted FreeCAD FEM template imports the exact STEP, checks validity/single solid and accepted mm bounds, resolves planar min/max-X faces by position/normal tolerances, rejects zero/ambiguous/overlapping regions, and creates labeled supports/loads with verified force directions.
+- `demo-fem` prepares actual tessellated region geometry in `regions.html`, saved `setup.FCStd`, structured analysis JSON/Markdown and a preparation record. It does not solve. `fem-solve` requires explicit confirmation binding spec, geometry, actual region data and the setup FCStd; modified inputs invalidate confirmation and repeated runs cannot overwrite outputs.
+- The solve meshes through Gmsh, writes/runs CalculiX, checks completion/FRD/DAT evidence, imports real displacement/stress fields and reads support reaction totals from DAT. It saves `analysis.FCStd`, results/report, preliminary nodal result images, logs, solver input/output and a hash/size completion manifest. Owned process trees are terminated on timeout.
+- Material allowlist currently contains only FreeCAD's sourced Steel-Generic reference: E 200000 MPa, Poisson ratio 0.3, density 7900 kg/m^3. This is a demonstration material, not certification of user stock; other materials require a reviewed/source-backed addition.
+- Real test and documented CLI demo: 100 x 20 x 10 mm cantilever, 100 N negative-Z tip force, 3 mm quadratic tetrahedral mesh. **Maximum displacement 0.0996479292 mm**, versus Euler-Bernoulli **0.1000000000 mm** (about 0.352% difference); max von Mises **29.8857787 MPa**. Extracted reaction `(2.345342e-10, 3.10296e-10, 100.0) N`; **7,761 nodes / 4,346 elements**. No acceptance criterion, convergence, fatigue or durability claim.
+- Persistent demonstration project: `25f06e9e33784d6187ea1b2fb8957db5`; analysis `5d993167c2da4b199162fb62c44a0f0b`; geometry SHA-256 `f3be430528516bddbe3e9fd115b6b387057be6b4560f06a2152d5f559b549cf8`. Artifacts are under ignored `data/projects/<project>/analyses/<analysis>/`. These are explicit integration-example inputs, not inferred conditions for a user design.
+- Current result images show actual nodal displacement/stress fields. Smooth contour controls and application analysis intake/review are not yet delivered; they remain M8/M9 work. CLI actual-face review and confirmation already work.
 
-## M2 boundary — deterministic CAD, FreeCAD and geometry rules: verified
+## M6: specification and generated CAD
 
-- What works: repository-authored `build(params)` creates a real 100 × 20 × 10 mm solid with CadQuery 2.6.1; trusted worker exports and hashes STEP/STL/source/parameters/metadata/logs without overwrites. FreeCADCmd 1.1.4 imports STEP through its API, saves a real FCStd and returns validity/solid/volume/area/bounding metrics. Geometry and tolerance rules are real; four future checks visibly return `NOT_IMPLEMENTED`.
-- Actual verification: **91 tests passed** in 12.08 s, including real CadQuery and FreeCAD executions. Separate demo project `4a4fb88dcc2947e88341886714d07f58`, attempt `ae167cc861b546a4a7c4cbeda23133f7`, revision `163cb34ded514a74851fb68350d9d234` succeeded. STEP SHA-256 `7a6c094538ab78e8f7043a4b38cacceee7153f10f5fa1587bb04879726886650`. FreeCAD found one valid nonempty solid, 19,999.999999999996 mm³ volume, 6,400 mm² area and exact 100 × 20 × 10 mm bounds; all eight mandatory rules passed.
-- Actual artifacts: `model.step` 15,457 bytes, `preview.stl` 684 bytes, `model.FCStd` 2,116 bytes, source/parameters/metadata/metrics/logs/summary in ignored local `data/`. Negative cases verified missing parameters, overwrite prevention, missing FreeCAD, geometry failures and missing/altered artifacts.
-- Blocked/unverified: Docker/Podman is absent, so this trusted deterministic worker is not a generated-code sandbox. Interactive preview is later UI work. Technical repair counter validation exists; generated-code repair is M6. FCStd is imported geometry; source and parameters remain parametric.
-- Manual check: optionally open the latest FCStd/STL found under the recorded revision directory. This is visual review; actual metrics are already verified.
-- Next milestone: M3 selectors, fixed Mechanical boundary, sanity checks and reporting. Mechanical installation/version/license/PyMechanical remain unavailable.
+- `agents/spec_writer.py` consumes a frozen brief and real image payloads, creates DesignSpec, preserves known dimensions/provenance, requirements, decisions, material intent and image IDs, and identifies unsupported designs. JSON and Markdown share one validated contract.
+- `agents/cad_creator.py` produces only a restricted `build(params)` function and explanation, converts parameters explicitly to mm/degrees, and receives previous code plus actual technical errors for one bounded repair.
+- `workers/code_validation.py` rejects imports, infrastructure/file/network/shell access, dunder/unknown attributes, decorators, rebinding trusted names and unsupported syntax. This is defense in depth, never a sandbox claim.
+- `workers/runtime.py`, `workers/Dockerfile`, `workers/container_entry.py` and `.dockerignore` implement the container boundary: no network/secrets, minimal job mount, non-root user, read-only root, dropped capabilities and CPU/memory/process/time limits; required outputs, hashes, sizes and completion evidence are checked. **Actual image build and isolated generated-code execution remain unverified because the runtime is absent.**
+- `generation.py` connects frozen brief -> persisted spec -> generated source -> container -> real FreeCAD -> geometry/bounding rules -> DESIGN_REVIEW. Durable single-claim jobs run in background; reruns/restarts do not silently replay existing work. A technical failure can consume one repair; blocked dependencies consume no repair or user rejection. Explicit retry creates a new attempt while preserving earlier artifacts.
+- Streamlit automatic mode starts generation once when configured, displays progress/errors and specification downloads, and exposes explicit blocked/failed retry. Acceptance remains intentionally gated for M7. Tests use labeled provider/container doubles for these transitions; they do not count as a live model or container integration.
+- Long-path regression exposed native STL/STEP/FCStd limitations beyond Python's extended-path support. Trusted CAD/FreeCAD/FEM native IO now uses short private staging paths and publishes verified outputs back to immutable revision directories; hashes and original artifact locations remain intact. This is captured in AGENTS.md.
+- Packaging includes previously omitted application/reporting/analysis modules; wheel build succeeded. The local knowledge index rebuilt with the unchanged source hash `1b9621cb4dd438cb2fdf8b8491e17d8b629964291dd87889c34e88ec69b9d290` (4 sources / 13 chunks). Timestamp-only index churn was not retained.
 
-## M3 boundary — deterministic Mechanical and reporting: blocked execution, independent parts verified
+## Verification
 
-- What now works: analysis input completeness, explicit-unit/hash/selector-overlap gates; min/max-X selector intent labeled unresolved until Mechanical; elementary cantilever displacement and reaction-equilibrium functions; deterministic success/failure reports; stale result rejection; a Mechanical adapter that returns `BLOCKED` without numeric fields when the executable/PyMechanical/compatibility is unavailable.
-- What was tested: **99 tests passed** in 11.79 s. New tests cover geometry-hash changes, missing inputs, overlapping regions, selector coordinates/normals, blocked results without fabricated numbers, exact absent-criterion wording, preliminary single-mesh/constraint warnings, beam-theory units and reaction balance.
-- Blocked/unverified: `C:\Program Files\ANSYS Inc` and `C:\Program Files\ANSYSEM` do not exist and no Mechanical executable or PyMechanical package was found. No region was resolved inside Mechanical, no named selection/mesh/solve/contour/project was created, and no numerical solver value is claimed. A verified material allowlist awaits authoritative runtime/material data.
-- Manual check: none for the blocked adapter. When Ansys is installed, the user must inspect actual highlighted support/load regions before confirming the solve.
-- Next milestone: per §22, continue independent M4 intake/routes/application work while preserving M3 as blocked. Revisit M3 when installed Mechanical version and license are available.
+- Pre-publication full rerun: **143 tests passed**, no skips, in **61.41 seconds** on Python 3.12.13, including real CAD, FreeCAD import/save, FreeCAD FEM/CalculiX and Streamlit tests. Fifteen third-party CadQuery/pyparsing deprecation warnings remain; no test failed.
+- Real FEM integration tests also verify explicit confirmation, stale setup rejection, no-overwrite runs, source-backed material gates and DAT reaction extraction. M6 tests cover requirement preservation, unit conversion, unsafe-source rejection, bounded repair, duplicate claims, blocked dependencies, explicit new attempts and recovery behavior.
+- A complete M6 state-machine test uses a clearly labeled container double with real repository-authored CAD/FreeCAD. It proves orchestration and native IO, **not sandbox execution**. No mock numeric solver values are used as integration evidence.
+- `uv lock --check`, wheel build and `git diff --check` passed. The repository reference scan found no remaining obsolete solver imports, executable variables, adapter references or names. The knowledge update/query and documented prepare/confirm/solve CLI commands ran successfully.
+- Final saved-demo audit verified all 27 artifact hashes/sizes, the FCStd ZIP integrity and embedded FEM mesh/results, exact raw-to-report result values, and both generated PNG files.
 
-## M4 boundary — intake, routes and application shell: verified
+## Earlier handoff evidence retained
 
-- What now works: Streamlit starts; incomplete intake captures idea/purpose/hard and soft requirements/dimensions with units/material/manufacturing and multiple images; project and bytes persist immediately; sidebar recovers sessions. Exact route titles/descriptions are present. Both routes produce the same validated `DesignBrief`; automatic mode records assumptions and enters `SPEC_GENERATION` without extra confirmation. Advisor mode opens an editable versioned brief and clearly labels the not-yet-connected M5 advisor. Generate/switch actions freeze and advance the brief without starting fake jobs.
-- What was tested: **105 tests passed** in 17.51 s. Streamlit AppTest drove minimal intake through both route buttons and verified automatic state/assumptions plus advisor workspace/blocked notice. App startup succeeded headlessly at port 8765 and was stopped after the probe. Pure tests cover dimension parsing and known-input preservation; storage restart tests cover real PNG bytes and idempotent jobs.
-- Blocked/unverified: RAG/Gemini chat and actual vision payload are M5 and remain blocked by missing Vertex configuration/ADC. Specification generation is M6; UI labels it unavailable and does not enqueue a fake generation. Interactive STL preview remains M7.
-- Manual check: run `.\.venv\Scripts\python.exe -m streamlit run app.py`, submit an incomplete idea with images, exercise both routes, then reopen the session from the sidebar.
-- Next milestone: M5 curated real sources, repeatable local index, cited retrieval and shared-brief updates. Implement independent RAG work first; live Gemini vision remains blocked until Vertex configuration/ADC is supplied.
+The previous machine recorded M1 77 tests; M2 91 tests including real CadQuery 2.6.1 / FreeCAD 1.1.4; M4 105 tests; and local M5 116 tests on Python 3.12.12. These historical counts are not current-PC verification. The old deterministic example was one valid 100 x 20 x 10 mm solid (volume approximately 20000 mm^3, area 6400 mm^2). Existing local databases, uploads and artifacts were ignored by Git and were not part of the checkout; newly generated demonstration state is also ignored. No credential file was transferred or created.
 
-## M5 boundary — RAG and multimodal living brief: local path verified, live Vertex blocked
+## GitHub handoff contents
 
-- What now works: four real authored seed documents cover all required initial knowledge topics without fabricated limits; JSON metadata labels them `authored_seed_note` and preserves topic/material/process/equipment/supplier context. Repeatable ingestion produces a persistent normalized TF-IDF vector plus BM25 hybrid index. Retrieval exposes chunk provenance. The advisor distinguishes simple edits from engineering decisions, builds a grounded prompt from the current brief/history/passages, limits questions, validates citations, records proposals/sources/questions into the same versioned brief, accepts choices, and prevents stale overwrites through existing storage concurrency.
-- Multimodal implementation: advisor uploads persist bytes/metadata immediately. The `google-genai` 1.75.0 Vertex adapter creates actual `Part.from_bytes` image parts with MIME type and explicit desired-reference/generated-screenshot role labels. It uses an explicit Vertex client and API `v1`; model/project/location remain configurable. The Streamlit advisor sends relevant stored bytes when Vertex is configured and otherwise displays a clearly labeled local retrieval-only response.
-- What was tested: **116 tests passed** in 22.29 s. M5 tests ingest actual files, create/reload 13 chunks from 4 sources, retrieve the relevant manufacturing passage, preserve provenance/context, cite real chunk IDs, reject invented citations, skip retrieval for a dimension edit, update/accept a brief choice, handle insufficient evidence, persist advisor chat/images, and inspect actual SDK inline image bytes. Streamlit AppTest exercised a blocked-Vertex advisor turn and displayed cited local evidence.
-- Repeatable evidence: `python -m cli knowledge-update` built source hash `1b9621cb4dd438cb2fdf8b8491e17d8b629964291dd87889c34e88ec69b9d290`; `knowledge-query 'waterjet versus CNC bracket manufacturing'` ranked the authored subtractive/sheet-process passage first with its equipment and supplier qualifiers.
-- Blocked/unverified: no ADC-authenticated Vertex request ran. Project, location, model and ADC are absent, so live Gemini model availability, image interpretation, response quality and cost are unverified. Local retrieval-only text is explicitly labeled and is not represented as Gemini. The TF-IDF vector is local and persistent but lexical rather than a neural semantic embedding; BM25 provides the second hybrid signal.
-- Manual check: run `python -m cli knowledge-update`, query the index, and use the advisor route in Streamlit. To verify Gemini later, set the documented Vertex variables and establish ADC, then send a message with a real image and inspect the cited response/brief update.
-- Next milestone: M6 deterministic JSON-to-Markdown specification rendering, role-specific Vertex spec/CAD functions, restricted generated code, and bounded technical repair. Generated-code execution remains blocked until an actual container runtime is available.
+The publication includes intended source/tests, project records, secret-free configuration examples, Python/dependency manifests and the existing curated knowledge sources/index. Local credentials, `.env`, ADC/secrets files, SQLite databases, `.venv/`, `.tools/`, caches, package/build outputs, uploads and generated CAD/FEM artifacts are excluded. The persistent demo paths above describe local verification evidence; those result bundles are not included in the repository. Another PC must restore the environment and FreeCAD/FEM tools, configure Vertex/container access if needed, and rerun the documented demos.
 
-## Current dependency and blocker state
+Pre-publication review scanned 75 intended files and found no recognized credential patterns, unexpected binaries or forbidden local/generated paths. Ignore checks confirmed exclusion of environments, portable software, local SQLite/demo data and secret-file locations; `uv lock --check` and `git diff --check` also passed. Only the example configuration is included, with no credentials.
 
-- Verified: Python 3.12.12, CadQuery 2.6.1, FreeCADCmd/API 1.1.4 and local SQLite/artifact storage.
-- Blocked: no generated-code container runtime; no Mechanical executable/version/license or compatible PyMechanical; no Vertex project/location/model/ADC.
-- Verified: Streamlit 1.66.1, google-genai 1.75.0 SDK construction, local TF-IDF/BM25 index, trimesh 4.12.2 and Plotly 6.9.0 packages. Actual STL preview remains pending.
-- Never treat a mock or fixture as actual CAD/solver evidence; never fabricate results.
+## Exact next action
 
-## Exact next step / resume instructions
-
-1. Reread §§8–12 and 23–24 of [PROJECT_SPEC.md](./PROJECT_SPEC.md).
-2. Implement deterministic `design_spec.json` and Markdown from one validated object plus role-specific Vertex spec/CAD adapters.
-3. Implement restricted `build(params)` validation and bounded repair bookkeeping. Do not execute generated code without the required container boundary; continue to use the verified trusted deterministic CAD path only for integration evidence.
-
-If resuming after compaction, read this file, [PLAN.md](./PLAN.md), [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md), then relevant specification sections. A persisted interrupted job requires artifact inspection and an explicit new retry key; it is never silently rerun.
+1. Begin M7 from sections 12-14 and 23 of [PROJECT_SPEC.md](./PROJECT_SPEC.md): actual STL preview/downloads, bounded user feedback/revisions, exact artifact-bound acceptance, and the three restart choices. Reuse the existing M6 pipeline and persistent records; do not restart the project.
+2. Keep the FreeCAD FEM + Gmsh + CalculiX backend for all future analysis work. M8 must connect its existing actual-region preparation/confirmation/solve API to the application and collect user-confirmed material/load/support information; an automatic CAD route never authorizes invented analysis inputs.
+3. Live-assisted verification still needs Vertex project/location/current model/ADC and a running Linux Docker/Podman engine with the CAD image. Do not execute generated source in an ordinary host process to bypass these blockers. Independent M7/M8 implementation can continue while the integrations remain explicitly blocked.
+4. If a job was interrupted, inspect its logs/artifacts and confirm the old owner stopped before explicit recovery/retry. No silent requeue or overwrite.

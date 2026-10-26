@@ -38,7 +38,7 @@ def analysis_spec():
 
 
 def results():
-    # Contract fixture, explicitly not an actual Mechanical solve.
+    # Contract fixture, explicitly not an actual FreeCAD FEM solve.
     return AnalysisResults(analysis_id="analysis", analysis_spec_version=1,
                            accepted_revision_id="revision", geometry_hash=HASH,
                            status="succeeded", provenance="test_fixture", solver_version="fixture",

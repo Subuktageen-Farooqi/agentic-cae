@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
 
 from agents.advisor import (accept_choice, advise, apply_reply_to_brief,
-                            grounded_local_fallback, should_retrieve)
+                            explicit_dimension_edit, grounded_local_fallback, should_retrieve)
 from app_logic import dimensions_from_lines, draft_brief, requirements_from_lines
 from config import Config
 from providers.vertex import ImagePayload, ProviderUnavailable, VertexGeminiProvider
@@ -15,6 +16,8 @@ from rag.retriever import LocalHybridRetriever
 from schemas import ChatMessage, DesignBrief, Intake, WorkflowState
 from storage import ConflictError, Store, Upload
 from workflow import Workflow
+from generation import GENERATION_STATES, latest_generation, retry_generation, start_generation
+from schemas import JobStatus
 
 
 st.set_page_config(page_title="Agentic CAE", layout="wide")
@@ -35,6 +38,11 @@ def route_to(target: WorkflowState, **kwargs) -> None:
 
 st.title("Agentic CAE")
 st.caption("Persistent mechanical design workflow prototype")
+
+
+@st.cache_resource
+def generation_executor():
+    return ThreadPoolExecutor(max_workers=2, thread_name_prefix="cae-generation")
 
 projects = store.projects()
 with st.sidebar:
@@ -102,7 +110,7 @@ if project["state"] == WorkflowState.ROUTE_SELECTION:
     with left:
         st.subheader("Brainstorm with our AI Mechanical Engineering Maestro")
         st.write("Explore mechanisms, joints, materials, manufacturing methods, and design trade-offs with an AI advisor supported by a mechanical engineering knowledge base. Together, refine your idea into a clearer design brief.")
-        if st.button("Open engineering advisor", use_container_width=True):
+        if st.button("Open engineering advisor", width="stretch"):
             brief = draft_brief(intake, automatic=False)
             store.save_brief(project_id, brief, expected_version=0, actor="user_route",
                              reason="Initialize shared advisor brief")
@@ -111,7 +119,7 @@ if project["state"] == WorkflowState.ROUTE_SELECTION:
     with right:
         st.subheader("Design it for me—I trust your judgment")
         st.write("Start from your description. The AI will choose reasonable defaults and clearly record its assumptions.")
-        if st.button("Draft automatically", type="primary", use_container_width=True):
+        if st.button("Draft automatically", type="primary", width="stretch"):
             brief = draft_brief(intake, automatic=True)
             store.save_brief(project_id, brief, expected_version=0, actor="automatic_route",
                              reason="Create automatic-route brief with visible assumptions")
@@ -164,10 +172,14 @@ if project["state"] == WorkflowState.ADVISOR_CHAT:
             store.save_record(project_id, user_message.message_id, 1, user_message)
             image_payloads = [ImagePayload(data=store.read_image(project_id, image.image_id),
                                            media_type=image.media_type, role=image.role,
-                                           image_id=image.image_id) for image in saved_images]
+                                           image_id=image.image_id) for image in store.images(project_id)
+                              if image.image_id in current.reference_image_ids]
             hits = retriever.search(question) if should_retrieve(question) else []
             try:
-                if provider_issues:
+                direct = explicit_dimension_edit(current, question)
+                if direct:
+                    reply = direct
+                elif provider_issues:
                     reply = grounded_local_fallback(question, hits)
                 else:
                     reply = advise(provider=provider, retriever=retriever, brief=current,
@@ -229,11 +241,45 @@ if project["state"] == WorkflowState.ADVISOR_CHAT:
         rerun()
     st.stop()
 
-if project["state"] == WorkflowState.SPEC_GENERATION:
+generation_blocked = project["state"] in (WorkflowState.BLOCKED, WorkflowState.ERROR) and project["resume_state"] in GENERATION_STATES
+if project["state"] in GENERATION_STATES or generation_blocked or project["state"] == WorkflowState.DESIGN_REVIEW:
     brief = store.brief(project_id)
     st.header("Specification generation")
-    st.warning("The brief is persisted and frozen for generation. The real Vertex specification writer is not implemented until M6; no generation is being claimed or silently repeated.")
-    st.json(json.loads(brief.model_dump_json()))
+    st.caption(f"Frozen brief v{brief.version}. Generated code runs only inside the configured restricted container.")
+    provider = VertexGeminiProvider(config)
+    issues = provider.availability_issues()
+    job = latest_generation(store, project_id)
+    if job is None and issues:
+        st.warning("Specification generation is blocked: " + "; ".join(issues))
+    elif job is None and project["state"] == WorkflowState.SPEC_GENERATION:
+        job = start_generation(store=store, project_id=project_id, provider=provider,
+                               config=config, executor=generation_executor())
+    if job is not None:
+        @st.fragment(run_every=2 if job.status in (JobStatus.PENDING, JobStatus.RUNNING) else None)
+        def generation_progress():
+            current_job = store.job(job.job_id)
+            current_project = store.project(project_id)
+            st.write(f"Generation job: **{current_job.status.value}** · stage **{current_project['state'].value}**")
+            if current_job.error:
+                st.error(current_job.error)
+            if current_job.status == JobStatus.SUCCEEDED:
+                st.success("The generated solid passed FreeCAD geometry checks. Engineering analysis has not run.")
+                st.info("Interactive design feedback and artifact-bound acceptance are the next milestone (M7).")
+            if current_job.result and current_job.result.get("artifact_directory"):
+                relative = current_job.result["artifact_directory"]
+                for name in ("design_spec.json", "design_spec.md", "generation-0.json", "generation-1.json"):
+                    path = store.path(relative + "/" + name)
+                    if path.is_file():
+                        st.download_button("Download " + name, path.read_bytes(), file_name=name, key="download-" + name)
+            if current_project["state"] != project["state"]:
+                st.rerun()
+        generation_progress()
+        if generation_blocked and st.button("Retry generation with a new attempt", disabled=bool(issues)):
+            retry_generation(store=store, project_id=project_id, provider=provider,
+                             config=config, executor=generation_executor())
+            rerun()
+    with st.expander("Frozen design brief", expanded=job is None):
+        st.json(json.loads(brief.model_dump_json()))
     st.stop()
 
 st.info("This persisted state is implemented by a later milestone. No expensive job was started automatically.")

@@ -12,6 +12,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import tempfile
 import time
 
 from schemas import Artifact, ArtifactManifest, new_id, utc_now
@@ -28,7 +29,8 @@ def _artifact(path: Path, project_root: Path, role: str, media_type: str) -> Art
 
 
 def run_trusted_build(*, project_id: str, job_id: str, model_source: Path,
-                      params: dict[str, float], output_dir: Path, project_root: Path) -> ArtifactManifest:
+                      params: dict[str, float], output_dir: Path, project_root: Path,
+                      execution_kind: str = "trusted_deterministic") -> ArtifactManifest:
     """Run a repository-authored build and require all CAD outputs.
 
     The output directory must be a new revision directory. Existing outputs are
@@ -61,16 +63,28 @@ def run_trusted_build(*, project_id: str, job_id: str, model_source: Path,
 
     step = output_dir / "model.step"
     preview = output_dir / "preview.stl"
-    exporters.export(result, str(step), exportType="STEP")
-    exporters.export(result, str(preview), exportType="STL", tolerance=0.05, angularTolerance=0.1)
+    # The native STL writer can silently fail above Windows MAX_PATH even when
+    # Python supports extended paths. Export to a short private staging folder,
+    # verify both outputs, then publish without clobbering revision artifacts.
+    with tempfile.TemporaryDirectory(prefix="cae-cad-") as temporary:
+        staged_step, staged_stl = Path(temporary) / "model.step", Path(temporary) / "preview.stl"
+        exporters.export(result, str(staged_step), exportType="STEP")
+        exporters.export(result, str(staged_stl), exportType="STL", tolerance=0.05, angularTolerance=0.1)
+        for source, target in [(staged_step, step), (staged_stl, preview)]:
+            if not source.is_file() or source.stat().st_size == 0:
+                raise RuntimeError("CadQuery native export did not produce a nonempty " + source.name)
+        for source, target in [(staged_step, step), (staged_stl, preview)]:
+            with source.open("rb") as incoming, target.open("xb") as outgoing:
+                shutil.copyfileobj(incoming, outgoing)
     shutil.copyfile(model_source, output_dir / "model.py")
     (output_dir / "parameters.json").write_text(json.dumps(params, indent=2, sort_keys=True), encoding="utf-8")
     elapsed = time.perf_counter() - started
     metadata = {
-        "schema_version": "1.0", "completed": True, "worker": "trusted_deterministic",
+        "schema_version": "1.0", "completed": True, "worker": execution_kind,
         "cadquery_version": getattr(cq, "__version__", "unknown"),
         "started_at": utc_now().isoformat(), "elapsed_seconds": elapsed,
-        "note": "Repository-authored deterministic model; not generated-code sandbox execution",
+        "note": ("Generated source executed inside the restricted container" if execution_kind == "generated_container"
+                 else "Repository-authored deterministic model; not generated-code sandbox execution"),
     }
     (output_dir / "generation.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     (output_dir / "cad.log").write_text(

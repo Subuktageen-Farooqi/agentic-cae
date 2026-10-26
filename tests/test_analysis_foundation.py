@@ -10,7 +10,12 @@ from analysis.static_structural_template import validate_static_setup
 from reporting import NO_CRITERION, render_report, results_json
 from schemas import (AcceptanceLimit, AnalysisResults, AnalysisSpec, BoundingBox, GeometryMetrics,
                      Load, Material, MeshInformation, MeshSettings, RegionSelector, Support)
-from workers.mechanical_worker import execute_static_or_block
+from workers.fem_worker import availability, execute_static_or_block
+
+
+def test_existing_executable_without_fem_dependencies_is_blocked():
+    import sys
+    assert availability(sys.executable, None, None)[0] is False
 
 
 def geometry():
@@ -44,7 +49,7 @@ def test_selector_intents_are_explicitly_unresolved_and_unit_aware():
                                              position_tolerance_mm=.01, normal_tolerance_degrees=1), geometry())
     assert (minimum.expected_x_mm, minimum.outward_normal) == (0, (-1, 0, 0))
     assert (maximum.expected_x_mm, maximum.outward_normal) == (100, (1, 0, 0))
-    assert minimum.verification_status == "UNRESOLVED_IN_MECHANICAL"
+    assert minimum.verification_status == "UNRESOLVED_IN_FREECAD_FEM"
 
 
 def test_invalid_or_overlapping_selector_intent_rejected():
@@ -66,13 +71,13 @@ def test_static_setup_hash_and_missing_inputs_gate(tmp_path):
         validate_static_setup(spec(step).model_copy(update={"material": None}), step)
 
 
-def test_absent_mechanical_returns_blocked_with_no_numbers(tmp_path):
+def test_absent_freecad_fem_returns_blocked_with_no_numbers(tmp_path):
     step = tmp_path / "model.step"
     step.write_bytes(b"accepted geometry fixture")
-    value = execute_static_or_block(spec=spec(step), accepted_step=step, mechanical_exe=None)
+    value = execute_static_or_block(spec=spec(step), accepted_step=step, freecad_cmd=None)
     assert value.status == "blocked" and value.provenance == "unavailable"
     assert value.maximum_displacement_mm is None and value.maximum_von_mises_mpa is None
-    assert "not configured" in value.error
+    assert "not configured" in value.error.lower()
 
 
 def test_beam_theory_and_reaction_sanity_under_matching_assumptions():
@@ -90,7 +95,7 @@ def test_blocked_report_is_failure_report_without_fake_values(tmp_path):
     step = tmp_path / "model.step"
     step.write_bytes(b"accepted geometry fixture")
     setup = spec(step)
-    blocked = execute_static_or_block(spec=setup, accepted_step=step, mechanical_exe=None)
+    blocked = execute_static_or_block(spec=setup, accepted_step=step, freecad_cmd=None)
     report = render_report(setup, blocked)
     assert "BLOCKED" in report and "No numerical solver results" in report
     assert "Maximum total displacement" not in report

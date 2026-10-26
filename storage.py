@@ -23,7 +23,7 @@ from schemas import (
     AnalysisRecommendation, AnalysisResults, AnalysisSpec, ArtifactManifest,
     CADGeneration, ChatMessage, Contract, DesignBrief, DesignFeedback, DesignSpec,
     GeometryMetrics, ImageReference, Intake, Job, JobStatus, RuleResult,
-    WorkflowState, new_id, utc_now,
+    WorkflowState, FEMPreparation, new_id, utc_now,
 )
 
 
@@ -46,7 +46,7 @@ class Upload:
 RECORD_TYPES = {c.__name__: c for c in (
     DesignBrief, DesignSpec, CADGeneration, GeometryMetrics, RuleResult,
     DesignFeedback, AnalysisRecommendation, AnalysisSpec, AnalysisResults,
-    ArtifactManifest, ChatMessage,
+    ArtifactManifest, ChatMessage, FEMPreparation,
 )}
 
 
@@ -396,6 +396,17 @@ class Store:
             if row is None:
                 raise KeyError(attempt_id)
             return dict(row)
+
+    def consume_technical_repair(self, revision_id: str) -> None:
+        with self._connection(write=True) as db:
+            row = db.execute("SELECT r.*,a.project_id FROM revisions r JOIN attempts a USING(attempt_id) WHERE revision_id=?",
+                             (revision_id,)).fetchone()
+            if row is None:
+                raise KeyError(revision_id)
+            if db.execute("UPDATE revisions SET technical_repairs=technical_repairs+1 WHERE revision_id=? AND technical_repairs=0",
+                          (revision_id,)).rowcount != 1:
+                raise ConflictError("Technical repair budget exhausted for this revision")
+            self._event(db, row["project_id"], "technical_repair_consumed", {"revision_id": revision_id})
 
     def create_revision(self, attempt_id: str) -> dict:
         with self._connection(write=True) as db:

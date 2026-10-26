@@ -1,8 +1,8 @@
 """Limited selector intent and validation.
 
 These functions validate intent against imported geometry bounds. They do not
-claim to resolve Mechanical face objects. Actual resolution and region images
-must occur inside Mechanical and remain blocked until that integration runs.
+claim to resolve FreeCAD FEM face objects. Actual resolution and region images
+must occur inside FreeCAD FEM and remain blocked until that integration runs.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ class SelectorIntent:
     outward_normal: tuple[float, float, float]
     position_tolerance_mm: float
     normal_tolerance_degrees: float
-    verification_status: str = "UNRESOLVED_IN_MECHANICAL"
+    verification_status: str = "UNRESOLVED_IN_FREECAD_FEM"
 
 
 def selector_intent(selector: RegionSelector, geometry: GeometryMetrics) -> SelectorIntent:
@@ -46,5 +46,7 @@ def validate_distinct_regions(supports: list[RegionSelector], loads: list[Region
         raise ValueError("At least one support and load selector are required")
     if support_ids & load_ids:
         raise ValueError("Support and load regions overlap")
+    if {item.kind for item in supports} & {item.kind for item in loads}:
+        raise ValueError("Support and load selectors resolve to overlapping geometric regions")
     if len(support_ids) != len(supports) or len(load_ids) != len(loads):
         raise ValueError("Selector IDs must be unique")

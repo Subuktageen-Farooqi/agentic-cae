@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from agents.advisor import (accept_choice, advise, apply_reply_to_brief,
-                            grounded_local_fallback, should_retrieve)
+from agents.advisor import (AdvisorReply, BriefUpdates, accept_choice, advise, apply_reply_to_brief,
+                            explicit_dimension_edit, grounded_local_fallback, should_retrieve)
 from config import Config
 from providers.vertex import ImagePayload, ProviderUnavailable, VertexGeminiProvider
 from rag.ingest import build_index, chunk_document
 from rag.retriever import LocalHybridRetriever
 from rag.sources import load_collection
-from schemas import ChatMessage, DesignBrief
+from schemas import ChatMessage, DesignBrief, Dimension, Requirement
 
 
 KNOWLEDGE = Path(__file__).parents[1] / "data" / "knowledge"
@@ -132,3 +132,36 @@ def test_vertex_adapter_builds_actual_inline_byte_part_without_filename_only():
     assert parts[-1].inline_data.data == image.data
     assert parts[-1].inline_data.mime_type == "image/png"
     assert "desired_reference" in parts[-2].text
+
+
+def test_explicit_dimension_edit_changes_only_requested_dimension_without_model():
+    brief = DesignBrief(design_name="Beam", dimensions=[
+        Dimension(name="length", value=100, unit="mm", origin="user_provided"),
+        Dimension(name="width", value=20, unit="mm", origin="inferred")],
+        hard_requirements=[Requirement(requirement_id="H1", text="One solid", confirmed=True)])
+    reply = explicit_dimension_edit(brief, "Change length to 120 mm")
+    updated = apply_reply_to_brief(brief, reply)
+    assert updated.dimensions[0].value == 120 and updated.dimensions[1] == brief.dimensions[1]
+    assert updated.hard_requirements == brief.hard_requirements and updated.version == brief.version + 1
+    assert brief.dimensions[0].value == 100
+
+
+def test_structured_advisor_edits_preserve_requirements_and_resolve_questions():
+    brief = DesignBrief(design_name="Beam", unresolved_questions=["Which material?"],
+                        hard_requirements=[Requirement(requirement_id="H1", text="Keep interface")])
+    reply = AdvisorReply(text="Updated the user-specified material.",
+                         brief_updates=BriefUpdates(materials=["Aluminum"], unresolved_questions=[]))
+    updated = apply_reply_to_brief(brief, reply)
+    assert updated.materials == ["Aluminum"] and updated.unresolved_questions == []
+    assert updated.hard_requirements == brief.hard_requirements
+
+
+def test_vertex_client_initialization_failure_is_provider_unavailable(monkeypatch):
+    from google import genai
+    def fail(**kwargs):
+        raise RuntimeError("ADC initialization failed")
+    monkeypatch.setattr(genai, "Client", fail)
+    provider = VertexGeminiProvider(Config.from_env({"GOOGLE_CLOUD_PROJECT": "test",
+        "GOOGLE_CLOUD_LOCATION": "global", "GEMINI_MODEL_ID": "test"}))
+    with pytest.raises(ProviderUnavailable, match="ADC initialization failed"):
+        provider.generate(system_instruction="test", prompt="test")

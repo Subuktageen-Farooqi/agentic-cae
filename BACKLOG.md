@@ -2,6 +2,8 @@
 
 Required product work is tracked in [PLAN.md](./PLAN.md) and [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md). This file does not defer required work out of scope.
 
+All future solver work uses FreeCAD FEM with Gmsh and CalculiX. The application's executable analysis scope remains linear static; other workbench/solver capabilities do not automatically make additional analysis types supported here.
+
 ## Unrelated improvements
 
 None identified.

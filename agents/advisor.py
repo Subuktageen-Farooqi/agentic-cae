@@ -4,11 +4,27 @@ import json
 import re
 from typing import Sequence
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from providers.vertex import ImagePayload, ProviderUnavailable, VisionTextProvider
 from rag.retriever import LocalHybridRetriever, RetrievalHit
-from schemas import ChatMessage, Contract, Decision, DesignBrief, SourceReference, VisualObservation
+from schemas import ChatMessage, Contract, Decision, DesignBrief, Dimension, SourceReference, VisualObservation
+
+
+class BriefUpdates(Contract):
+    """Editable engineering fields; identity and confirmed requirements cannot be replaced."""
+    design_name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    purpose: str | None = None
+    interfaces: list[str] | None = None
+    mechanisms_and_joints: list[str] | None = None
+    materials: list[str] | None = None
+    manufacturing: list[str] | None = None
+    assembly: list[str] | None = None
+    loads: list[str] | None = None
+    operating_environment: list[str] | None = None
+    assumptions: list[str] | None = None
+    unresolved_questions: list[str] | None = None
 
 
 class AdvisorReply(Contract):
@@ -17,6 +33,8 @@ class AdvisorReply(Contract):
     proposed_choices: list[str] = Field(default_factory=list)
     visual_observations: list[VisualObservation] = Field(default_factory=list)
     sources: list[SourceReference] = Field(default_factory=list)
+    dimension_updates: list[Dimension] = Field(default_factory=list)
+    brief_updates: BriefUpdates = Field(default_factory=BriefUpdates)
     mode: str = "vertex_grounded"
 
 
@@ -30,10 +48,32 @@ For images, separate visible observations from inference and user-confirmed fact
 never infer precise dimensions, material properties or load capacity from an
 unscaled image. Return JSON with text, questions, proposed_choices,
 source_chunk_ids (only IDs from supplied passages), and
-visual_observations [{image_id,text,basis}]."""
+visual_observations [{image_id,text,basis}]. Include dimension_updates (validated
+Dimension objects with name, value, unit, origin) and brief_updates for explicit
+user changes to purpose, description, materials, manufacturing, interfaces,
+mechanisms_and_joints, assembly, loads, operating_environment, assumptions or
+unresolved_questions. Preserve unaffected fields. Do not mark inferred choices
+accepted or user_provided. Propose uncertain changes instead. Never replace
+confirmed requirements. Explicitly answered questions can be removed using
+brief_updates.unresolved_questions."""
 
 
 DIMENSION_EDIT = re.compile(r"^\s*(change|set|update)\s+.{0,40}\s+to\s+[0-9.]+\s*(mm|m|in|deg)?\s*$", re.I)
+
+
+def explicit_dimension_edit(brief: DesignBrief, message: str) -> AdvisorReply | None:
+    match = re.fullmatch(r"\s*(?:change|set|update)\s+(.{1,40}?)\s+to\s+(\d+(?:\.\d+)?)\s*(mm|m|in|deg)?\s*", message, re.I)
+    if not match:
+        return None
+    name, value, unit = match.groups()
+    prior = next((d for d in brief.dimensions if d.name.casefold() == name.strip().casefold()), None)
+    if prior is None or float(value) <= 0:
+        return None
+    selected_unit = unit.lower() if unit else prior.unit
+    dimension = Dimension(name=prior.name, value=float(value), unit=selected_unit,
+                          origin="user_provided", tolerance=prior.tolerance if selected_unit == prior.unit else None)
+    return AdvisorReply(text=f"Set {prior.name} to {float(value):g} {selected_unit}.",
+                        dimension_updates=[dimension], mode="explicit_user_edit")
 
 
 def should_retrieve(message: str) -> bool:
@@ -63,16 +103,24 @@ def _prompt(brief: DesignBrief, history: Sequence[ChatMessage], message: str,
 def advise(*, provider: VisionTextProvider, retriever: LocalHybridRetriever,
            brief: DesignBrief, history: Sequence[ChatMessage], message: str,
            images: Sequence[ImagePayload] = ()) -> AdvisorReply:
+    direct = explicit_dimension_edit(brief, message)
+    if direct:
+        return direct
     hits = retriever.search(message) if should_retrieve(message) else []
     raw = provider.generate(system_instruction=SYSTEM, prompt=_prompt(brief, history, message, hits), images=images)
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as error:
         raise ProviderUnavailable("Vertex response was not valid JSON") from error
-    allowed = {hit.reference.chunk_id: hit.reference for hit in hits}
-    cited_ids = payload.pop("source_chunk_ids", [])
-    sources = [allowed[item] for item in cited_ids if item in allowed]
-    reply = AdvisorReply.model_validate({**payload, "sources": sources})
+    try:
+        if not isinstance(payload, dict):
+            raise ValueError("Expected a JSON object")
+        allowed = {hit.reference.chunk_id: hit.reference for hit in hits}
+        cited_ids = payload.pop("source_chunk_ids", [])
+        sources = [allowed[item] for item in cited_ids if item in allowed]
+        reply = AdvisorReply.model_validate({**payload, "sources": sources})
+    except (ValidationError, ValueError, TypeError) as error:
+        raise ProviderUnavailable("Vertex advisor response did not match the validated contract") from error
     if hits and not sources:
         return reply.model_copy(update={"text": reply.text + "\n\nRetrieved evidence was not cited; treat this recommendation as insufficiently grounded."})
     return reply
@@ -99,8 +147,12 @@ def apply_reply_to_brief(brief: DesignBrief, reply: AdvisorReply) -> DesignBrief
     existing_sources.update({item.chunk_id: item for item in reply.sources})
     decisions = brief.proposed_choices + [Decision(text=text, status="proposed", sources=reply.sources)
                                            for text in reply.proposed_choices]
-    questions = list(dict.fromkeys(brief.unresolved_questions + reply.questions))
-    return brief.model_copy(update={"version": brief.version + 1,
+    changes = reply.brief_updates.model_dump(exclude_none=True, exclude={"schema_version"})
+    dimensions = {d.name.casefold(): d for d in brief.dimensions}
+    dimensions.update({d.name.casefold(): d for d in reply.dimension_updates})
+    questions = list(dict.fromkeys(changes.get("unresolved_questions", brief.unresolved_questions) + reply.questions))
+    return DesignBrief.model_validate({**brief.model_dump(), **changes, "version": brief.version + 1,
+                                    "dimensions": list(dimensions.values()),
                                     "proposed_choices": decisions,
                                     "unresolved_questions": questions,
                                     "supporting_sources": list(existing_sources.values()),

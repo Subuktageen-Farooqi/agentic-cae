@@ -16,7 +16,8 @@ def test_diagnostics_never_print_config_values_credentials_or_claim_execution(tm
     assert secret not in output and str(adc) not in output
     assert report["vertex"]["adc_file_present"] is True
     assert report["vertex"]["authentication"] == "unverified"
-    assert report["mechanical"]["license"] == "unverified"
+    assert report["fem"]["execution"] == "unverified"
+    assert report["fem"]["backend"] == "FreeCAD FEM / CalculiX"
     assert report["freecad"]["execution"] == "unverified"
 
 

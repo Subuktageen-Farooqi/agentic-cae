@@ -194,6 +194,7 @@ class DesignSpec(Contract):
     accepted_decisions: list[Decision] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
+    bounding_dimensions: dict[Literal["x", "y", "z"], str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def unique_ids_and_parameters(self) -> DesignSpec:
@@ -204,6 +205,10 @@ class DesignSpec(Contract):
             raise ValueError("Requirement IDs, feature IDs and dimension names must be unique")
         if any(name not in names for feature in self.features for name in feature.parameter_names):
             raise ValueError("Features may only reference declared dimensions")
+        if any(name not in names for name in self.bounding_dimensions.values()):
+            raise ValueError("Bounding dimensions must reference declared dimensions")
+        if any(d.unit == "deg" for d in self.dimensions if d.name in self.bounding_dimensions.values()):
+            raise ValueError("Bounding dimensions must be lengths, not angles")
         return self
 
 
@@ -370,6 +375,7 @@ class AnalysisSpec(Contract):
     assumptions: list[str] = Field(default_factory=list)
     missing_inputs: list[str] = Field(default_factory=list)
     execution_supported: bool = False
+    expected_bounds_mm: BoundingBox | None = None
 
     @model_validator(mode="after")
     def coherent_selectors(self) -> AnalysisSpec:
@@ -400,6 +406,27 @@ class AnalysisSpec(Contract):
 class MeshInformation(Contract):
     nodes: Annotated[int, Field(gt=0)]
     elements: Annotated[int, Field(gt=0)]
+
+
+class ResolvedRegion(Contract):
+    selector_id: Nonempty
+    face_name: Nonempty
+    center_mm: tuple[float, float, float]
+    normal: tuple[float, float, float]
+    area_mm2: Positive
+
+
+class FEMPreparation(Contract):
+    analysis_id: Nonempty
+    analysis_spec_version: Annotated[int, Field(ge=1)]
+    accepted_revision_id: Nonempty
+    geometry_hash: Digest
+    spec_hash: Digest
+    regions_hash: Digest
+    setup_hash: Digest
+    confirmation_hash: Digest
+    regions: list[ResolvedRegion]
+    directory: Nonempty
 
 
 class AnalysisResults(Contract):

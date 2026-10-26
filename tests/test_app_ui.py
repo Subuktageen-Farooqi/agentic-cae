@@ -27,7 +27,7 @@ def test_automatic_route_persists_incomplete_intake_and_enters_spec_state(monkey
     next(item for item in app.button if item.label == "Draft automatically").click().run(timeout=10)
     assert not app.exception
     assert any(header.value == "Specification generation" for header in app.header)
-    assert any("real Vertex specification writer is not implemented" in warning.value for warning in app.warning)
+    assert any("Specification generation is blocked" in warning.value for warning in app.warning)
     assert "Dimensions will be inferred" in str(app.json[0].value)
 
 
@@ -56,3 +56,71 @@ def test_blocked_vertex_route_still_returns_cited_local_evidence(monkeypatch, tm
     assert assistant_messages
     assert "Local retrieved evidence" in assistant_messages[-1].children[0].value
     assert any(expander.label == "Sources" for expander in app.expander)
+
+
+def test_advisor_resends_persisted_intake_images_after_reopen(monkeypatch, tmp_path, png_bytes):
+    import json
+    from schemas import DesignBrief, Intake, WorkflowState
+    from storage import Store, Upload
+    from workflow import Workflow
+    calls = []
+    class Provider:
+        def __init__(self, config): pass
+        def availability_issues(self): return []
+        def generate(self, **kwargs):
+            calls.append(kwargs)
+            return json.dumps({"text": "I received the reference.", "source_chunk_ids": []})
+    app = _new_app(monkeypatch, tmp_path)
+    store = Store(tmp_path / "app-data")
+    project = store.create_project(Intake(idea="Bracket"), [Upload("reference.png", "image/png", png_bytes)])
+    ids = store.original_intake(project).reference_image_ids
+    flow = Workflow(store)
+    flow.transition(project, WorkflowState.ROUTE_SELECTION, expected_version=0, reason="test")
+    store.save_brief(project, DesignBrief(design_name="Bracket", reference_image_ids=ids),
+                     expected_version=0, actor="test", reason="test")
+    flow.transition(project, WorkflowState.ADVISOR_CHAT, expected_version=2, route="advisor", reason="test")
+    monkeypatch.setattr("providers.vertex.VertexGeminiProvider", Provider)
+    app.session_state["project_id"] = project
+    app.run(timeout=10)
+    app.chat_input[0].set_value("What can you see in my intake reference?").run(timeout=10)
+    assert not app.exception
+    assert calls[-1]["images"][0].data == png_bytes
+    assert calls[-1]["images"][0].image_id == ids[0]
+
+
+def test_automatic_generation_persists_spec_and_displays_blocked_job_without_rerunning(monkeypatch, tmp_path):
+    import json
+    from schemas import DesignBrief, DesignSpec, Dimension, Feature
+    from workers.runtime import SandboxUnavailable
+    from generation import start_generation as real_start
+    calls = []
+    class Provider:
+        def __init__(self, config): pass
+        def availability_issues(self): return []
+        def generate(self, **kwargs):
+            payload = json.loads(kwargs["prompt"])
+            calls.append(payload)
+            if "frozen_brief" in payload:
+                brief = DesignBrief.model_validate(payload["frozen_brief"])
+                return DesignSpec(brief_id=brief.brief_id, brief_version=brief.version,
+                    design_name=brief.design_name, purpose="Mount a sensor", units="mm",
+                    dimensions=[Dimension(name="length", value=100, unit="mm", origin="inferred")],
+                    features=[Feature(feature_id="beam", kind="extrusion", description="Supported beam", parameter_names=["length"])],
+                    assumptions=["Concept dimensions inferred"]).model_dump_json()
+            return json.dumps({"code": "def build(params):\n return cq.Workplane('XY').box(params['length'], 20, 10)",
+                               "explanation": "Provider double for blocked job test"})
+    class Immediate:
+        def submit(self, function, **kwargs): return function(**kwargs)
+    def start(**kwargs): return real_start(**{**kwargs, "executor": Immediate()})
+    def blocked(**kwargs): raise SandboxUnavailable("Container engine is missing")
+    monkeypatch.setattr("providers.vertex.VertexGeminiProvider", Provider)
+    monkeypatch.setattr("generation.start_generation", start)
+    monkeypatch.setattr("generation.execute_generated", blocked)
+    app = _submit_minimal_intake(_new_app(monkeypatch, tmp_path))
+    next(b for b in app.button if b.label == "Draft automatically").click().run(timeout=10)
+    assert not app.exception
+    assert any("Container engine is missing" in item.value for item in app.error)
+    assert len(calls) == 2
+    app.run(timeout=10)
+    assert not app.exception and len(calls) == 2
+    assert any(b.label == "Download design_spec.json" for b in app.get("download_button"))

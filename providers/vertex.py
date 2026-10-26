@@ -8,6 +8,7 @@ Live model availability/authentication remains unverified until a request runs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import suppress
 from typing import Protocol, Sequence
 
 from config import Config
@@ -68,11 +69,12 @@ class VertexGeminiProvider:
             from google.genai import types
         except ImportError as error:
             raise ProviderUnavailable("google-genai is not installed") from error
-        client = self._client or genai.Client(
-            vertexai=True, project=self.config.google_project, location=self.config.google_location,
-            http_options=types.HttpOptions(api_version="v1"),
-        )
+        client = self._client
         try:
+            client = self._client or genai.Client(
+                vertexai=True, project=self.config.google_project, location=self.config.google_location,
+                http_options=types.HttpOptions(api_version="v1", timeout=self.config.worker_timeout_seconds * 1000),
+            )
             response = client.models.generate_content(
                 model=self.config.gemini_model_id,
                 contents=self._contents(prompt, images),
@@ -82,6 +84,10 @@ class VertexGeminiProvider:
             )
         except Exception as error:
             raise ProviderUnavailable(f"Vertex Gemini request failed: {type(error).__name__}: {error}") from error
+        finally:
+            if self._client is None and client is not None:
+                with suppress(Exception):
+                    client.close()
         if not response.text:
             raise ProviderUnavailable("Vertex Gemini returned no text")
         return response.text

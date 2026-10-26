@@ -1,14 +1,26 @@
 # Implementation plan
 
-Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), read in full on 2026-10-26 (1,010 lines). The specification remains authoritative. This plan does not reduce its scope. Every milestone starts by rereading its relevant specification sections and ends by updating all project records with actual evidence.
+Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), including the user-approved FreeCAD FEM changeover dated 2026-10-26. The specification remains authoritative. This plan does not reduce its scope. Every milestone starts by rereading its relevant specification sections and ends by updating all project records with actual evidence.
 
 ## Ordered, independently testable milestones
+
+### Authorized solver changeover (2026-10-26)
+
+1. Fix and regression-test persisted advisor image forwarding, structured brief edits, provider initialization failures, and dependency-probe failures.
+2. Replace the former proprietary solver boundary with FreeCAD FEM + Gmsh + CalculiX. Preserve contracts, stored records, geometry hashes, explicit units, review/confirmation gates and deterministic reports; no database reset.
+3. Resolve min/max-X faces inside FreeCAD, export their actual geometry for review, then require confirmation bound to that setup before meshing/solving. Reject empty, ambiguous, overlapping and incorrectly scaled geometry.
+4. Verify real STEP → FEM → CalculiX results where dependencies permit, including displacement, stress, reaction balance, mesh, logs, saved FCStd and preliminary-result limitations. Remove obsolete dependencies/configuration/instructions.
+5. Resume M6: deterministic specification rendering, role-specific generation, restricted code, container execution and one technical repair. Keep unavailable services explicitly blocked.
+
+All current and future solver requirements use FreeCAD FEM with CalculiX. No solver license or Python solver-client package is required.
+
+Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever solve verified; four review fixes regression-tested. M6 is implemented and locally tested, with live Vertex and actual generated-code container execution still blocked. The next independent milestone is M7; exact evidence and limitations are in [STATUS.md](./STATUS.md).
 
 | Milestone | Delivered behavior | Verification | Manual check |
 | --- | --- | --- | --- |
 | M1 — Contracts, persistence, orchestration | Validated records; immutable intake/images; versioned briefs; explicit transitions; durable, idempotent jobs; interrupted-job recovery; dependency diagnostics. No claim of CAD, LLM, or solver execution. | Focused Python tests using real temporary SQLite databases and artifact directories; restart/recovery, concurrency, tampering, stale-version and invalid-transition tests; run diagnostics. | Review dependency findings and setup instructions. No UI yet. |
 | M2 — Deterministic CAD and FreeCAD | Fixed cantilever parameters produce real STEP/STL through a constrained CadQuery worker, imported/validated/saved by FreeCADCmd; extensible geometry rules; explicit unavailable-dependency states. | Execute actual sandboxed CAD and FreeCAD when available; verify manifests, hashes, metrics, expected files; negative builds and rule tests. | Open generated FCStd and inspect STL if local software is available. |
-| M3 — Deterministic Mechanical and reporting | Confirmed cantilever setup resolves and previews actual regions inside Mechanical, then solves linear static analysis and extracts evidence into deterministic reports. | Real licensed solve when available; version probe, unit scaling, ambiguity/input rejection, displacement versus beam theory, reaction balance, result/report consistency and stale-result rejection. Test doubles are labeled and never count as real solves. | Inspect selected faces before confirming; inspect contours and preliminary single-mesh limitations. |
+| M3 — Deterministic FreeCAD FEM and reporting | Confirmed cantilever setup resolves and previews actual regions inside FreeCAD FEM, then solves linear static analysis and extracts evidence into deterministic reports. | Real CalculiX solve when available; version probe, unit scaling, ambiguity/input rejection, displacement versus beam theory, reaction balance, result/report consistency and stale-result rejection. Test doubles are labeled and never count as real solves. | Inspect selected faces before confirming; inspect contours and preliminary single-mesh limitations. |
 | M4 — Intake, routes and application shell | Streamlit collects incomplete intake and multiple images, persists immediately, offers both exact specified routes, recovers sessions and displays background progress/errors. Automatic route proceeds with assumptions. | Streamlit interaction tests; persistent bytes after restart; route/state tests; reruns do not repeat jobs. | Submit incomplete intake and multiple references; try both routes. |
 | M5 — Real RAG and multimodal living brief | Curated source ingestion, local embeddings with lexical fallback, provenance, repeatable update command; Gemini advisor sends actual image content, cites retrieved passages, and updates the editable versioned brief safely. | Ingest/retrieve real seed notes; citation and insufficient-evidence tests; concurrency tests; actual Gemini vision call when ADC/model are available. | Evaluate recommendations, accept a choice, edit brief directly, restart and inspect images. |
 | M6 — Specification and generated CAD | Vertex Gemini role functions create validated specs and restricted CadQuery code from frozen brief/images; trusted worker owns exports; one technical repair per generated revision. | JSON/Markdown consistency, schema/requirement preservation, actual generated CAD through M2 when available; blocked unsafe/unsupported requests and bounded repairs. | Review assumptions, dimension provenance and generated simple bracket/support. |
@@ -18,7 +30,7 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), read in full on 2026-10-26 (1,0
 
 ## Dependency policy and execution discipline
 
-- Missing FreeCAD, container, Gemini credentials or licensed Mechanical block their actual executions, not independent milestones. Implement adapters with explicit BLOCKED results; never fabricate geometry, citations or solver values.
+- Missing FreeCAD, container, Gemini credentials or FreeCAD FEM with CalculiX block their actual executions, not independent milestones. Implement adapters with explicit BLOCKED results; never fabricate geometry, citations or solver values.
 - Do not execute generated CAD in an ordinary subprocess and call it a security sandbox. Use an isolated runtime with no network/secrets, limited mounts and resource/time limits.
 - Verify current Google Gen AI SDK/Vertex model availability before implementing the provider in M5. Use ADC, configurable project/location/model, and local RAG embeddings; never require an OpenAI key.
 - Before each milestone reread the relevant spec: M1 §§8,20–24; M2 §§2,9–12,23; M3 §§15–19,23; M4 §§4,6,20; M5 §§5–8,24; M6 §§8–12; M7 §§12–14; M8 §§15–18; M9 entire spec and verification/handoff sections.

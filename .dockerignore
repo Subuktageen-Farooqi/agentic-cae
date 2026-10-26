@@ -1,0 +1,7 @@
+**
+!schemas.py
+!workers/
+!workers/__init__.py
+!workers/cad_worker.py
+!workers/container_entry.py
+!workers/Dockerfile
