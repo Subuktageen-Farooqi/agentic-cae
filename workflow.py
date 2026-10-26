@@ -57,10 +57,10 @@ class Workflow:
                     raise ValueError("Route choice must match its target state")
             if target in (S.BRIEF_READY, S.SPEC_GENERATION) and project["brief_version"] == 0:
                 raise ValueError("Create a validated brief before generation")
-            # These transitions need business gates not yet available in M1.
-            if (current, target) in {(S.DESIGN_REVIEW, S.ANALYSIS_INTAKE),
-                                      (S.ANALYSIS_SPEC_REVIEW, S.ANALYSIS_EXECUTION)}:
-                raise ValueError("Acceptance/analysis confirmation gate is not implemented yet")
+            if current in (S.DESIGN_REVIEW, S.RESTART_OFFER) and not failure:
+                raise ValueError("Use the artifact-bound feedback/acceptance/restart gate")
+            if (current, target) == (S.ANALYSIS_SPEC_REVIEW, S.ANALYSIS_EXECUTION):
+                raise ValueError("Use the actual-region analysis confirmation gate")
             resume_state = current.value if failure else None
             db.execute("UPDATE projects SET state=?,row_version=row_version+1,route=COALESCE(?,route),resume_state=? WHERE project_id=?",
                        (target.value, route, resume_state, project_id))

@@ -9,12 +9,13 @@ import subprocess
 
 from agents.cad_creator import cad_parameters, create_cad
 from agents.spec_writer import write_spec
+from agents.revision_writer import revise_brief
 from config import Config
 from providers.vertex import ImagePayload, ProviderUnavailable, VisionTextProvider
 from reporting import render_design_spec
 from rules.geometry import bounding_dimension_rules, core_geometry_rules, mandatory_geometry_passes
 from rules.manufacturing import scaffolded_rules
-from schemas import JobStatus, WorkflowState as S, new_id
+from schemas import CADGeneration, DesignReview, JobStatus, WorkflowState as S, new_id
 from storage import Store
 from workers.code_validation import CodeRejected, validate_code
 from workers.freecad_worker import run_freecad_validation
@@ -33,17 +34,33 @@ def brief_images(store: Store, project_id: str, brief) -> list[ImagePayload]:
 
 def latest_generation(store: Store, project_id: str):
     brief = store.brief(project_id)
-    jobs = [j for j in store.jobs(project_id) if j.kind == "DESIGN_GENERATION" and
-            j.payload.get("brief_id") == brief.brief_id and j.payload.get("brief_version") == brief.version]
+    jobs = [j for j in store.jobs(project_id) if j.kind == "DESIGN_GENERATION"]
+    active = [j for j in jobs if j.status in (JobStatus.PENDING, JobStatus.RUNNING)]
+    if active:
+        return active[-1]
+    if store.project(project_id)["state"] == S.SPEC_GENERATION:
+        jobs = [j for j in jobs if j.payload.get("brief_id") == brief.brief_id and j.payload.get("brief_version") == brief.version]
     return jobs[-1] if jobs else None
 
 
 def enqueue_generation(store: Store, project_id: str, *, request_key: str | None = None):
     brief = store.brief(project_id)
+    key = request_key or f"generation:{brief.brief_id}:{brief.version}"
+    existing = next((job for job in store.jobs(project_id) if job.idempotency_key == key), None)
+    if existing is not None:
+        if existing.kind != "DESIGN_GENERATION" or (existing.payload.get("brief_id"), existing.payload.get("brief_version")) != (brief.brief_id, brief.version):
+            raise ValueError("Generation key already belongs to different frozen inputs")
+        return existing
     if store.project(project_id)["state"] != S.SPEC_GENERATION:
         raise ValueError("Generation must start from a frozen brief in SPEC_GENERATION")
-    return store.enqueue(project_id, request_key or f"generation:{brief.brief_id}:{brief.version}", "DESIGN_GENERATION",
-                         {"brief_id": brief.brief_id, "brief_version": brief.version})
+    payload = {"brief_id": brief.brief_id, "brief_version": brief.version}
+    active = store.project(project_id)["active_attempt_id"]
+    if active:
+        with store._connection(write=True) as db:
+            if not db.execute("SELECT 1 FROM revisions WHERE attempt_id=?", (active,)).fetchone():
+                db.execute("UPDATE attempts SET brief_version=? WHERE attempt_id=?", (brief.version, active))
+                payload["attempt_id"] = active
+    return store.enqueue(project_id, key, "DESIGN_GENERATION", payload)
 
 
 def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvider, config: Config):
@@ -59,8 +76,29 @@ def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvide
 
     try:
         brief = store.brief(project_id, job.payload["brief_version"])
+        feedback, prior_generation = None, None
+        if job.payload.get("feedback_id"):
+            feedback = store.record(project_id, "DesignFeedback", job.payload["feedback_id"], 1)
+            prior = store.record(project_id, "DesignReview", job.payload["previous_revision_id"], 1)
+            previous_spec = store.record(project_id, "DesignSpec", prior.spec_id, prior.spec_version)
+            prior_generation = [g for g in store.records(project_id, "CADGeneration") if g.revision_id == prior.revision_id]
+            prior_generation = prior_generation[-1] if prior_generation else None
+            if prior_generation is None:
+                from review import review_artifacts
+                artifacts = review_artifacts(store, project_id, prior)
+                files = {a.role: store.path(a.relative_path) for a in artifacts["cad"].artifacts}
+                prior_generation = CADGeneration(attempt_id=prior.attempt_id, revision_id=prior.revision_id,
+                    spec_id=prior.spec_id, spec_version=prior.spec_version, code=files["model_source"].read_text(encoding="utf-8"),
+                    parameters=json.loads(files["parameters"].read_text(encoding="utf-8")),
+                    explanation="Prior repository-authored reference source; no model generation claimed")
+            preview_brief = brief.model_copy(update={"reference_image_ids": list(dict.fromkeys(brief.reference_image_ids + feedback.reference_image_ids))})
+            updated = revise_brief(brief=brief, previous_spec=previous_spec, feedback=feedback,
+                                   provider=provider, images=brief_images(store, project_id, preview_brief))
+            brief = store.save_brief(project_id, updated, expected_version=brief.version,
+                                     actor="user_feedback", reason="Revise from persisted feedback without losing unaffected requirements")
         images = brief_images(store, project_id, brief)
-        attempt = store.create_attempt(project_id, brief.version)
+        attempt = (store.attempt(job.payload["attempt_id"]) if job.payload.get("attempt_id")
+                   else store.create_attempt(project_id, brief.version))
         revision = store.create_revision(attempt["attempt_id"])
         relative = revision["relative_path"]
         evidence.update(attempt_id=attempt["attempt_id"], revision_id=revision["revision_id"], artifact_directory=relative)
@@ -73,7 +111,8 @@ def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvide
         previous, failure = None, None
         for repair in range(2):
             generation = create_cad(spec=spec, attempt_id=attempt["attempt_id"], revision_id=revision["revision_id"],
-                provider=provider, images=images, previous=previous, technical_error=failure)
+                provider=provider, images=images, previous=previous, technical_error=failure,
+                previous_revision=prior_generation, design_feedback=feedback.model_dump(mode="json") if feedback else None)
             store.save_record(project_id, generation.generation_id, 1, generation)
             store.write_once(relative + f"/generation-{repair}.json", generation.model_dump_json(indent=2).encode())
             try:
@@ -107,6 +146,11 @@ def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvide
                     raise CADBuildError("Mandatory geometry checks failed: " + json.dumps([c.model_dump(mode="json") for c in checks if c.mandatory]))
                 evidence.update(geometry_hash=metrics.geometry_hash, cad_manifest_id=cad.manifest_id,
                                 freecad_manifest_id=imported.manifest_id)
+                review = DesignReview(attempt_id=attempt["attempt_id"], revision_id=revision["revision_id"],
+                    brief_version=brief.version, spec_id=spec.spec_id, spec_version=spec.version,
+                    geometry_hash=metrics.geometry_hash, cad_manifest_id=cad.manifest_id,
+                    freecad_manifest_id=imported.manifest_id, checks=checks)
+                store.save_record(project_id, review.revision_id, 1, review)
                 transition(S.DESIGN_REVIEW, "Generated geometry passed all implemented mandatory checks; engineering analysis has not run")
                 return store.finish(job.job_id, owner, JobStatus.SUCCEEDED, result=evidence)
             except SandboxUnavailable:

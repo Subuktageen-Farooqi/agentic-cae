@@ -18,6 +18,7 @@ from storage import ConflictError, Store, Upload
 from workflow import Workflow
 from generation import GENERATION_STATES, latest_generation, retry_generation, start_generation
 from schemas import JobStatus
+from app_views import render_design_review, render_restart, render_analysis
 
 
 st.set_page_config(page_title="Agentic CAE", layout="wide")
@@ -58,6 +59,17 @@ with st.sidebar:
     elif st.button("Open selected session"):
         st.session_state.project_id = selected
         rerun()
+    with st.expander("Real integration example"):
+        st.caption("Generate actual reference cantilever CAD with the repository-authored CadQuery model. No LLM, mocked geometry or solver values.")
+        if st.button("Generate reference cantilever", disabled=not bool(config.freecad_cmd)):
+            try:
+                from examples.deterministic_demo import run
+                with st.spinner("Generating STEP/STL, importing with FreeCAD and checking real geometry…"):
+                    result = run(config.data_dir)
+                st.session_state.project_id = result["project_id"]
+                rerun()
+            except (RuntimeError, OSError, ImportError) as error:
+                st.error(str(error))
 
 project_id = st.session_state.get("project_id")
 if not project_id:
@@ -106,13 +118,41 @@ st.caption(f"Session `{project_id}` · state **{project['state'].value}**")
 
 if project["state"] == WorkflowState.ROUTE_SELECTION:
     st.header("Choose how to continue")
+    if project["brief_version"]:
+        working = store.brief(project_id)
+        with st.expander("Original idea — prepopulated working copy", expanded=True):
+            st.caption("The original intake and failed attempts remain unchanged. Edit this working copy to start again.")
+            for image in store.images(project_id):
+                if image.image_id in working.reference_image_ids:
+                    st.image(store.read_image(project_id, image.image_id), width=180, alt="Original persisted reference image")
+            with st.form("restart-working-intake"):
+                description = st.text_area("Idea", working.description)
+                purpose = st.text_area("Purpose", working.purpose)
+                hard = st.text_area("Hard requirements", "\n".join(r.text for r in working.hard_requirements))
+                soft = st.text_area("Preferences", "\n".join(r.text for r in working.soft_requirements))
+                dimensions = st.text_area("Dimensions", "\n".join(f"{d.name} = {d.value:g} {d.unit}" for d in working.dimensions))
+                material = st.text_input("Materials", ", ".join(working.materials))
+                manufacturing = st.text_input("Manufacturing", ", ".join(working.manufacturing))
+                changed = st.form_submit_button("Update working idea")
+            if changed:
+                if not description.strip():
+                    st.error("Describe the working idea before saving.")
+                    st.stop()
+                updated = DesignBrief.model_validate({**working.model_dump(), "version": working.version + 1,
+                    "description": description, "design_name": description.strip().splitlines()[0][:80], "purpose": purpose,
+                    "hard_requirements": requirements_from_lines(hard,"HARD"), "soft_requirements":requirements_from_lines(soft,"SOFT"),
+                    "dimensions": dimensions_from_lines(dimensions, intake.units),
+                    "materials": [material] if material.strip() else [], "manufacturing":[manufacturing] if manufacturing.strip() else []})
+                store.save_brief(project_id, updated, expected_version=working.version, actor="user", reason="Edit original-idea restart working copy")
+                rerun()
     left, right = st.columns(2)
     with left:
         st.subheader("Brainstorm with our AI Mechanical Engineering Maestro")
         st.write("Explore mechanisms, joints, materials, manufacturing methods, and design trade-offs with an AI advisor supported by a mechanical engineering knowledge base. Together, refine your idea into a clearer design brief.")
         if st.button("Open engineering advisor", width="stretch"):
-            brief = draft_brief(intake, automatic=False)
-            store.save_brief(project_id, brief, expected_version=0, actor="user_route",
+            previous_version = project["brief_version"]
+            brief = (store.brief(project_id).model_copy(update={"version": previous_version + 1}) if previous_version else draft_brief(intake, automatic=False))
+            store.save_brief(project_id, brief, expected_version=previous_version, actor="user_route",
                              reason="Initialize shared advisor brief")
             route_to(WorkflowState.ADVISOR_CHAT, route="advisor", reason="User selected advisor route")
             rerun()
@@ -120,8 +160,9 @@ if project["state"] == WorkflowState.ROUTE_SELECTION:
         st.subheader("Design it for me—I trust your judgment")
         st.write("Start from your description. The AI will choose reasonable defaults and clearly record its assumptions.")
         if st.button("Draft automatically", type="primary", width="stretch"):
-            brief = draft_brief(intake, automatic=True)
-            store.save_brief(project_id, brief, expected_version=0, actor="automatic_route",
+            previous_version = project["brief_version"]
+            brief = (store.brief(project_id).model_copy(update={"version": previous_version + 1}) if previous_version else draft_brief(intake, automatic=True))
+            store.save_brief(project_id, brief, expected_version=previous_version, actor="automatic_route",
                              reason="Create automatic-route brief with visible assumptions")
             route_to(WorkflowState.BRIEF_READY, route="automatic", reason="User selected automatic route")
             route_to(WorkflowState.SPEC_GENERATION, reason="Automatic route enters specification generation")
@@ -241,8 +282,26 @@ if project["state"] == WorkflowState.ADVISOR_CHAT:
         rerun()
     st.stop()
 
+if project["state"] in (WorkflowState.DESIGN_REVIEW, WorkflowState.RESTART_OFFER):
+    try:
+        if project["state"] == WorkflowState.DESIGN_REVIEW:
+            render_design_review(store, project_id, project, config, generation_executor())
+        else:
+            render_restart(store, project_id, project)
+    except (ValueError, RuntimeError, OSError) as error:
+        st.error(str(error))
+    st.stop()
+
+analysis_states = {WorkflowState.ANALYSIS_INTAKE, WorkflowState.ANALYSIS_SPEC_REVIEW, WorkflowState.ANALYSIS_EXECUTION, WorkflowState.REPORT_READY}
+if project["state"] in analysis_states or (project["state"] in (WorkflowState.BLOCKED, WorkflowState.ERROR) and project["resume_state"] in analysis_states):
+    try:
+        render_analysis(store, project_id, project, config, generation_executor())
+    except (ValueError, RuntimeError, OSError) as error:
+        st.error(str(error))
+    st.stop()
+
 generation_blocked = project["state"] in (WorkflowState.BLOCKED, WorkflowState.ERROR) and project["resume_state"] in GENERATION_STATES
-if project["state"] in GENERATION_STATES or generation_blocked or project["state"] == WorkflowState.DESIGN_REVIEW:
+if project["state"] in GENERATION_STATES or generation_blocked:
     brief = store.brief(project_id)
     st.header("Specification generation")
     st.caption(f"Frozen brief v{brief.version}. Generated code runs only inside the configured restricted container.")
@@ -264,7 +323,6 @@ if project["state"] in GENERATION_STATES or generation_blocked or project["state
                 st.error(current_job.error)
             if current_job.status == JobStatus.SUCCEEDED:
                 st.success("The generated solid passed FreeCAD geometry checks. Engineering analysis has not run.")
-                st.info("Interactive design feedback and artifact-bound acceptance are the next milestone (M7).")
             if current_job.result and current_job.result.get("artifact_directory"):
                 relative = current_job.result["artifact_directory"]
                 for name in ("design_spec.json", "design_spec.md", "generation-0.json", "generation-1.json"):

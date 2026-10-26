@@ -118,31 +118,31 @@ Current PC: Python 3.12.13 and all four locked extras are installed; portable Fr
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
 | 12-01 | Technical repair triggered by execution/mandatory failure, receives real traceback/checks, max one per generated revision; exhausted stage exposes real error | `workflow.py`, `agents/cad_creator.py` | Failure capture and bounded-repair tests | verified |
-| 12-02 | Separate repair/rejection counters; max two user rejections; initial plus one feedback regeneration; no unbounded loop | `workflow.py`, `storage.py` | Counter and per-attempt/revision tests | pending |
-| 13-01 | Interactive actual preview; params/spec/assumptions/rules/coverage/CAD downloads | `app.py` | Real STL display and download hashes | pending |
-| 13-02 | Accept/revise/thumb controls, feedback text/images, explicit submit | `app.py`, `schemas.py:DesignFeedback` | UI paths and feedback contract tests | pending |
-| 13-03 | Thumbs-only, text-only, text+image, image+explicit-revision feedback all valid | `schemas.py:DesignFeedback`, `app.py` | Four input-mode tests; empty feedback rejected unless thumbs action | pending |
-| 13-04 | Thumbs down without detail uses reasoned revision from known requirements and explains change without inventing reason | `agents/revision_writer.py` | No-detail feedback prompt/output test | pending |
-| 13-05 | First rejection persists feedback, updates brief/spec intent, preserves unaffected requirements, regenerates and reruns checks | `workflow.py`, `agents/revision_writer.py` | Complete first-rejection integration with preserved IDs | pending |
-| 13-06 | Second rejection records failed attempt preserving both revisions/artifacts/feedback; offers restarts | `workflow.py`, `storage.py`, `app.py` | Failed-attempt persistence and no third candidate | pending |
-| 13-07 | Acceptance binds exact revision/geometry artifact then analysis intake | `workflow.py`, `storage.py` | Accepted hash stays tied to reviewed revision | pending |
-| 14-01 | Preserve original intake/images and approved/refined brief as distinct snapshots | `storage.py` | Independent snapshot reload and immutable image hashes | pending |
-| 14-02 | Retry approved brief / brainstorm with failed feedback / original idea, preserving correct context | `workflow.py`, `app.py` | All three restart scenarios and original prepopulation | pending |
-| 14-03 | Restart new attempt ID/reset counters; never overwrite failed attempts; brainstorming retains decisions/failure context | `storage.py`, `workflow.py` | Attempt history/reset/context tests | pending |
+| 12-02 | Separate repair/rejection counters; max two user rejections; initial plus one feedback regeneration; no unbounded loop | `workflow.py`, `storage.py` | Counter and per-attempt/revision tests | verified |
+| 13-01 | Interactive actual preview; params/spec/assumptions/rules/coverage/CAD downloads | `app.py` | Real STL display and download hashes | verified |
+| 13-02 | Accept/revise/thumb controls, feedback text/images, explicit submit | `app.py`, `schemas.py:DesignFeedback` | UI paths and feedback contract tests | implemented |
+| 13-03 | Thumbs-only, text-only, text+image, image+explicit-revision feedback all valid | `schemas.py:DesignFeedback`, `app.py` | Four input-mode tests; explicit revise action, including no-detail feedback | verified |
+| 13-04 | Thumbs down without detail uses reasoned revision from known requirements and explains change without inventing reason | `agents/revision_writer.py` | No-detail feedback prompt/output test | implemented |
+| 13-05 | First rejection persists feedback, updates brief/spec intent, preserves unaffected requirements, regenerates and reruns checks | `workflow.py`, `agents/revision_writer.py` | Complete first-rejection integration with preserved IDs | implemented |
+| 13-06 | Second rejection records failed attempt preserving both revisions/artifacts/feedback; offers restarts | `workflow.py`, `storage.py`, `app.py` | Failed-attempt persistence and no third candidate | verified |
+| 13-07 | Acceptance binds exact revision/geometry artifact then analysis intake | `workflow.py`, `storage.py` | Accepted hash stays tied to reviewed revision | verified |
+| 14-01 | Preserve original intake/images and approved/refined brief as distinct snapshots | `storage.py` | Independent snapshot reload and immutable image hashes | verified |
+| 14-02 | Retry approved brief / brainstorm with failed feedback / original idea, preserving correct context | `workflow.py`, `app.py` | All three restart scenarios and original prepopulation | verified |
+| 14-03 | Restart new attempt ID/reset counters; never overwrite failed attempts; brainstorming retains decisions/failure context | `storage.py`, `workflow.py` | Attempt history/reset/context tests | verified |
 
 ## Analysis intake/spec (§§15–16)
 
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
-| 15-01 | Ask exact learning-goal question after acceptance; use purpose/requirements/material/geometry/conditions | `app.py`, `agents/analysis_planner.py` | Accepted-design analysis intake test | pending |
+| 15-01 | Ask exact learning-goal question after acceptance; use purpose/requirements/material/geometry/conditions | `app.py`, `agents/analysis_planner.py` | Accepted-design analysis intake test | implemented |
 | 15-02 | Recommendations name/question/relevance/inputs/supported flag | `schemas.py:AnalysisRecommendation`, `agents/analysis_planner.py` | Complete validated recommendations | pending |
-| 15-03 | Execute linear static only; identify modal/random vibration/fatigue/transient/other as unsupported | `schemas.py`, `agents/analysis_planner.py` | Unsupported analysis requests never reach solver | pending |
+| 15-03 | Execute linear static only; identify modal/random vibration/fatigue/transient/other as unsupported | `schemas.py`, `agents/analysis_planner.py` | Unsupported analysis requests never reach solver | implemented |
 | 15-04 | No invented spectra/S-N curves/damping/histories/mounts; static does not prove fatigue/vibration life | `agents/analysis_planner.py`, `reporting.py` | Missing-input and scope-limitation tests | pending |
 | 16-01 | analysis_spec.json and deterministic Markdown | `reporting.py`, `examples/fem_demo.py` | Same validated source produces both | verified |
 | 16-02 | Schema/spec version, accepted revision/hash, type/question, material ID/source and explicit units | `schemas.py:AnalysisSpec` | Required-field, unit and binding validation | verified |
 | 16-03 | Supports/loads/selectors/mesh/outputs/acceptance/assumptions/missing/supported status | `schemas.py:AnalysisSpec` | Complete/incomplete/unsupported contract cases | verified |
 | 16-04 | Sufficient material/load/support before execution; verified small material allowlist; no brief contradiction | `analysis/materials.py`, `workflow.py` | Material-source and missing-input gate tests | implemented |
-| 16-05 | Proposed setup and actual selected regions shown; explicit input confirmation; automatic CAD route never authorizes analysis defaults | `app.py`, `workflow.py` | Confirm-before-solve and invalidation tests | implemented |
+| 16-05 | Proposed setup and actual selected regions shown; explicit input confirmation; automatic CAD route never authorizes analysis defaults | `app.py`, `workflow.py` | Confirm-before-solve and invalidation tests | verified |
 
 ## Selectors and FreeCAD FEM (§§17–18)
 
@@ -150,7 +150,7 @@ Current PC: Python 3.12.13 and all four locked extras are installed; portable Fr
 | --- | --- | --- | --- | --- |
 | 17-01 | No face IDs across revisions; min/max-X planar selectors with position/orientation/tolerances | `schemas.py:RegionSelector`, `analysis/selectors.py` | Contract and deterministic geometric matching tests | verified |
 | 17-02 | Resolve in FreeCAD FEM after import; create labeled FEM constraints; reject zero/ambiguous/invalid/overlapping regions | `workers/fem_script.py`, `analysis/static_structural_template.py` | Actual imported-face matching and invalid-region tests | verified |
-| 17-03 | Display actual selected regions before solving, not textual selectors | `workers/fem_worker.py`, `app.py` | Real region images/geometry preview before confirmation | implemented |
+| 17-03 | Display actual selected regions before solving, not textual selectors | `workers/fem_worker.py`, `app.py` | Real region images/geometry preview before confirmation | verified |
 | 17-04 | Check imported dimensions for scaling; explicit units on every API boundary | `analysis/selectors.py`, `analysis/static_structural_template.py` | mm/m geometry scaling and force/stress unit tests | verified |
 | 18-01 | FreeCAD FEM Python API controls installed FreeCAD FEM with CalculiX; verify installed-version compatibility | `workers/fem_worker.py`, `config.py` | FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 real solve | verified |
 | 18-02 | Fixed parameterized AnalysisSpec template, never arbitrary LLM solver scripts | `analysis/static_structural_template.py` | Template review and invalid input tests | verified |
@@ -193,10 +193,10 @@ Current PC: Python 3.12.13 and all four locked extras are installed; portable Fr
 | 23-01 | Actual source ingestion/relevant retrieval/cited recommendation/accepted choice/insufficient evidence | `tests/test_rag.py`, `examples/` | Execute all five RAG demonstrations | verified |
 | 23-02 | Actual image through vision and preserved through restart | `tests/`, `examples/` | Live Gemini image response plus persisted-byte hash | blocked |
 | 23-03 | Actual model/export/FreeCAD/preview; failed build; repair budget; scaffold NOT_IMPLEMENTED | `tests/`, `examples/cantilever.py` | Execute deterministic CAD demo and negative cases | blocked |
-| 23-04 | First revision, second failure, three restarts, artifact-bound acceptance | `tests/test_feedback.py` | Complete feedback/restart integration cases | pending |
-| 23-05 | Accepted geometry import/actual face display; missing/ambiguous rejection; real solve/report equality/stale result rejection | `tests/`, `examples/cantilever.py` | Real FreeCAD FEM demo and failure tests | implemented |
-| 23-06 | Reload session after application restart; no duplicate frontend jobs | `tests/test_storage.py`, `tests/test_app.py` | SQLite restart and Streamlit rerun tests | pending |
-| 23-07 | Matching-assumption beam-theory displacement and force equilibrium; no overinterpreted constrained peak stress | `analysis/sanity.py`, `reporting.py`, `tests/` | Real solver versus analytical estimate with explicit tolerance | blocked |
+| 23-04 | First revision, second failure, three restarts, artifact-bound acceptance | `tests/test_review.py`, `tests/test_app_fem_e2e.py` | Complete feedback/restart integration cases | implemented |
+| 23-05 | Accepted geometry import/actual face display; missing/ambiguous rejection; real solve/report equality/stale result rejection | `tests/`, `examples/cantilever.py` | Real FreeCAD FEM demo and failure tests | verified |
+| 23-06 | Reload session after application restart; no duplicate frontend jobs | `tests/test_storage.py`, `tests/test_app.py` | SQLite restart and Streamlit rerun tests | verified |
+| 23-07 | Matching-assumption beam-theory displacement and force equilibrium; no overinterpreted constrained peak stress | `analysis/sanity.py`, `reporting.py`, `tests/` | Real solver versus analytical estimate with explicit tolerance | verified |
 | 24-01 | Source/dependency setup/tested versions/config without secrets/exact startup | `README.md`, `pyproject.toml`, `.env.example` | Clean-environment documented commands and version evidence | implemented |
 | 24-02 | KB update command, FreeCAD/FreeCAD FEM paths, deterministic and assisted demos | `README.md`, `examples/`, `config.py` | Run each documented command, record actual outcomes | implemented |
 | 24-03 | Truthful verified/unverified/blocked/planned distinctions, known limitations and actual evidence; no complete-product claim with blocked solver | `STATUS.md`, `REQUIREMENTS_CHECKLIST.md`, `README.md`, `app.py` | Audit claims against recorded executions | pending |
@@ -208,4 +208,4 @@ Current PC: Python 3.12.13 and all four locked extras are installed; portable Fr
 
 ## Current verification boundary
 
-The real deterministic FEM path is verified. Region preview/confirmation is available through the CLI; application analysis intake/review remains M8. Exported images currently show actual nodal displacement/stress fields; smooth contour/postprocessing controls remain unverified. M6 specification/source/repair/job behavior is tested with labeled provider/container doubles; actual Vertex and generated-code container execution remain blocked. The full assisted journey is still pending.
+The real deterministic FEM path is verified. App and CLI actual-region review/confirmation work for the limited reference-steel linear-static setup. Broader M8 advisor-led intake/recommendations remain pending. Exported images currently show actual nodal displacement/stress fields; smooth contour/postprocessing controls remain unverified. M6 specification/source/repair/job behavior is tested with labeled provider/container doubles; actual Vertex and generated-code container execution remain blocked. M7 feedback/restart transactions and UI are tested with labeled fixtures; live Gemini/container regeneration and the full assisted journey remain pending. Real no-solver-mock app integration is in tests/test_app_fem_e2e.py and FEM_INTEGRATION_REPORT.md.

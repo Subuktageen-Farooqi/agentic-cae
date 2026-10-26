@@ -8,7 +8,9 @@ from pathlib import Path
 from config import Config
 from rules.geometry import bounding_dimension_rules, core_geometry_rules, mandatory_geometry_passes
 from rules.manufacturing import scaffolded_rules
-from schemas import DesignBrief, DesignSpec, Dimension, Feature, Intake, JobStatus, Requirement
+from schemas import DesignBrief, DesignReview, DesignSpec, Dimension, Feature, Intake, JobStatus, Requirement, WorkflowState as S
+from reporting import render_design_spec
+from workflow import Workflow
 from storage import Store
 from workers.cad_worker import run_trusted_build
 from workers.freecad_worker import run_freecad_validation
@@ -116,4 +118,18 @@ def run(data_dir: str | Path, freecad_cmd: str | None = None) -> dict:
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     if not summary["mandatory_geometry_passed"]:
         raise RuntimeError("Mandatory geometry checks failed; see demo summary")
+    store.write_once(revision["relative_path"] + "/design_spec.json", spec.model_dump_json(indent=2).encode())
+    store.write_once(revision["relative_path"] + "/design_spec.md", render_design_spec(spec).encode())
+    store.save_record(project_id, revision["revision_id"], 1, DesignReview(
+        attempt_id=attempt["attempt_id"], revision_id=revision["revision_id"], brief_version=brief.version,
+        spec_id=spec.spec_id, spec_version=spec.version, cad_manifest_id=cad_manifest.manifest_id,
+        freecad_manifest_id=freecad_manifest.manifest_id, geometry_hash=metrics.geometry_hash,
+        checks=results, source="trusted_reference"))
+    flow = Workflow(store)
+    for target in (S.ROUTE_SELECTION, S.BRIEF_READY, S.SPEC_GENERATION, S.CAD_GENERATION,
+                   S.CAD_EXECUTION, S.FREECAD_VALIDATION, S.RULE_CHECKS, S.DESIGN_REVIEW):
+        current = store.project(project_id)
+        flow.transition(project_id, target, expected_version=current["row_version"],
+                        route="automatic" if current["state"] == S.ROUTE_SELECTION else None,
+                        reason="Verified repository-authored reference CAD integration; no LLM or sandbox execution claimed")
     return summary

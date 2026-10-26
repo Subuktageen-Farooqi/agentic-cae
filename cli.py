@@ -27,6 +27,7 @@ def main() -> None:
     query.add_argument("query")
     query.add_argument("--root", default="data/knowledge")
     commands.add_parser("demo-fem", help="Prepare a real cantilever FEM setup; requires explicit confirmation before solve")
+    commands.add_parser("verify-fem-e2e", help="Drive a real reference CAD → app review → FreeCAD FEM solve → displayed report integration (no solver mocks)")
     for name in ("fem-prepare", "fem-solve"):
         command = commands.add_parser(name, help="FreeCAD FEM setup review" if name == "fem-prepare" else "Solve a previously reviewed FreeCAD FEM setup")
         command.add_argument("--spec", required=True)
@@ -56,6 +57,10 @@ def main() -> None:
                            "source": hit.reference.model_dump(mode="json")} for hit in hits], indent=2))
         return
     data_dir = args.data_dir or config.data_dir
+    if args.command == "verify-fem-e2e":
+        from examples.integration_run import run
+        print(json.dumps(run(data_dir), indent=2))
+        return
     if args.command in ("fem-prepare", "fem-solve"):
         from pathlib import Path
         from schemas import AnalysisSpec, FEMPreparation

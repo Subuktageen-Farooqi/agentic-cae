@@ -27,6 +27,7 @@ def test_unknown_material_is_not_silently_substituted():
         validate_material(steel.model_copy(update={"name": "Aluminum"}))
 
 
+@pytest.mark.real_integration
 def test_real_fem_cantilever_prepare_confirmation_solve_and_stale_checks(tmp_path):
     config = Config.from_env()
     if not availability(config.freecad_cmd, config.calculix_exe, config.gmsh_exe)[0]:

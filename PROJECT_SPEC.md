@@ -917,6 +917,13 @@ Do not abandon the application or replace missing execution with fabricated data
 23. REQUIRED VERIFICATION
 ==================================================
 
+Repeatable real reference integration: `python -m cli --data-dir data verify-fem-e2e`.
+This exercises fresh repository-authored CadQuery geometry, app STL review and
+artifact-bound acceptance, explicit actual-region analysis confirmation, real
+FreeCAD FEM/Gmsh/CalculiX execution, in-app fields/report and numerical checks.
+It does not substitute for live Vertex or generated-code sandbox verification.
+See FEM_INTEGRATION_REPORT.md for actual commands/results and test boundaries.
+
 Use focused tests for state transitions and integration boundaries.
 
 Demonstrate:

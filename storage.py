@@ -17,13 +17,14 @@ from pathlib import Path
 import re
 import sqlite3
 import tempfile
+import time
 from typing import Iterator, Sequence
 
 from schemas import (
     AnalysisRecommendation, AnalysisResults, AnalysisSpec, ArtifactManifest,
     CADGeneration, ChatMessage, Contract, DesignBrief, DesignFeedback, DesignSpec,
     GeometryMetrics, ImageReference, Intake, Job, JobStatus, RuleResult,
-    WorkflowState, FEMPreparation, new_id, utc_now,
+    WorkflowState, FEMPreparation, DesignReview, DesignAcceptance, RestartDecision, new_id, utc_now,
 )
 
 
@@ -46,7 +47,7 @@ class Upload:
 RECORD_TYPES = {c.__name__: c for c in (
     DesignBrief, DesignSpec, CADGeneration, GeometryMetrics, RuleResult,
     DesignFeedback, AnalysisRecommendation, AnalysisSpec, AnalysisResults,
-    ArtifactManifest, ChatMessage, FEMPreparation,
+    ArtifactManifest, ChatMessage, FEMPreparation, DesignReview, DesignAcceptance, RestartDecision,
 )}
 
 
@@ -73,7 +74,7 @@ class Store:
         self.database = self.root / "workflow.sqlite3"
         with self._connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise RuntimeError(f"Unsupported database schema version {version}")
             db.execute("PRAGMA journal_mode=WAL")
             db.executescript("""
@@ -139,18 +140,35 @@ class Store:
                     BEGIN SELECT RAISE(ABORT, 'Audit events are immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS immutable_events_delete BEFORE DELETE ON events
                     BEGIN SELECT RAISE(ABORT, 'Audit events are immutable'); END;
-                PRAGMA user_version=1;
             """)
+        # Additive migration: retain every v1 record and artifact.
+        with self._connection(write=True) as db:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(projects)")}
+            for name in ("active_attempt_id", "accepted_revision_id", "accepted_geometry_hash"):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE projects ADD COLUMN {name} TEXT")
+            db.execute("PRAGMA user_version=2")
 
     @contextmanager
     def _connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
-        db = sqlite3.connect(self.database, timeout=15, isolation_level=None)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys=ON")
-        db.execute("PRAGMA synchronous=FULL")
+        # Windows WAL can briefly return SQLITE_PROTOCOL while competing
+        # connections initialize. Retry only before yielding the transaction;
+        # never replay a transaction body or a commit with unknown outcome.
+        for attempt in range(5):
+            db = sqlite3.connect(self.database, timeout=15, isolation_level=None)
+            db.row_factory = sqlite3.Row
+            try:
+                db.execute("PRAGMA foreign_keys=ON")
+                db.execute("PRAGMA synchronous=FULL")
+                if write:
+                    db.execute("BEGIN IMMEDIATE")
+                break
+            except sqlite3.OperationalError as error:
+                db.close()
+                if getattr(error, "sqlite_errorcode", None) != sqlite3.SQLITE_PROTOCOL or attempt == 4:
+                    raise
+                time.sleep(.02 * (attempt + 1))
         try:
-            if write:
-                db.execute("BEGIN IMMEDIATE")
             yield db
             if write:
                 db.commit()
@@ -387,6 +405,7 @@ class Store:
         with self._connection(write=True) as db:
             db.execute("INSERT INTO attempts(attempt_id,project_id,brief_version,created_at) VALUES (?,?,?,?)",
                        (attempt_id, project_id, brief_version, utc_now().isoformat()))
+            db.execute("UPDATE projects SET active_attempt_id=? WHERE project_id=?", (attempt_id, project_id))
             self._event(db, project_id, "attempt_created", {"attempt_id": attempt_id, "brief_version": brief_version})
         return self.attempt(attempt_id)
 
@@ -408,6 +427,14 @@ class Store:
                 raise ConflictError("Technical repair budget exhausted for this revision")
             self._event(db, row["project_id"], "technical_repair_consumed", {"revision_id": revision_id})
 
+    def revision(self, revision_id: str) -> dict:
+        with self._connection() as db:
+            row = db.execute("SELECT r.*,a.project_id FROM revisions r JOIN attempts a USING(attempt_id) WHERE revision_id=?",
+                             (revision_id,)).fetchone()
+            if row is None:
+                raise KeyError(revision_id)
+            return dict(row)
+
     def create_revision(self, attempt_id: str) -> dict:
         with self._connection(write=True) as db:
             attempt = db.execute("SELECT * FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
@@ -428,23 +455,27 @@ class Store:
                     "technical_repairs": 0, "relative_path": relative}
 
     def enqueue(self, project_id: str, key: str, kind: str, payload: dict) -> Job:
+        with self._connection(write=True) as db:
+            return self._enqueue(db, project_id, key, kind, payload)
+
+    def _enqueue(self, db: sqlite3.Connection, project_id: str, key: str, kind: str, payload: dict) -> Job:
         if not key.strip() or not kind.strip():
             raise ValueError("Job kind and idempotency key are required")
         body = _json(payload)
         digest = hashlib.sha256(body.encode()).hexdigest()
-        with self._connection(write=True) as db:
-            self._project_row(db, project_id)
-            row = db.execute("SELECT * FROM jobs WHERE project_id=? AND idempotency_key=?", (project_id, key)).fetchone()
-            if row is not None:
-                if row["kind"] != kind or row["payload_hash"] != digest:
-                    raise ConflictError("Idempotency key reused for different inputs")
-                return self._job(row)
-            job_id, now = new_id(), utc_now().isoformat()
-            db.execute("INSERT INTO jobs(job_id,project_id,idempotency_key,kind,payload,payload_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                       (job_id, project_id, key, kind, body, digest, JobStatus.PENDING, now, now))
-            self._event(db, project_id, "job_enqueued", {"job_id": job_id, "kind": kind})
-            row = db.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+        self._project_row(db, project_id)
+        row = db.execute("SELECT * FROM jobs WHERE project_id=? AND idempotency_key=?", (project_id, key)).fetchone()
+        if row is not None:
+            if row["kind"] != kind or row["payload_hash"] != digest:
+                raise ConflictError("Idempotency key reused for different inputs")
             return self._job(row)
+        job_id, now = new_id(), utc_now().isoformat()
+        db.execute("INSERT INTO jobs(job_id,project_id,idempotency_key,kind,payload,payload_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                   (job_id, project_id, key, kind, body, digest, JobStatus.PENDING, now, now))
+        self._event(db, project_id, "job_enqueued", {"job_id": job_id, "kind": kind})
+        row = db.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+        return self._job(row)
+
 
     @staticmethod
     def _job(row: sqlite3.Row) -> Job:

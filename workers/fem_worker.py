@@ -42,6 +42,7 @@ def _invoke(mode: str, spec: AnalysisSpec, step: Path, directory: Path, *, freec
             calculix_exe: str, gmsh_exe: str, timeout_seconds: int) -> None:
     job = {"mode": mode, "spec": spec.model_dump(mode="json"), "step": str(step.resolve()),
            "directory": str(directory.resolve()), "publication_directory": str(directory.resolve()),
+           "freecad_executable": freecad_cmd,
            "ccx": calculix_exe, "gmsh": gmsh_exe,
            "timeout": timeout_seconds}
     job_path = directory / f"{mode}_job.json"

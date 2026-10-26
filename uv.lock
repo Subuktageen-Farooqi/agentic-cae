@@ -19,6 +19,9 @@ dependencies = [
 cad = [
     { name = "cadquery" },
 ]
+fem = [
+    { name = "matplotlib" },
+]
 llm = [
     { name = "google-genai" },
 ]
@@ -35,13 +38,14 @@ ui = [
 requires-dist = [
     { name = "cadquery", marker = "extra == 'cad'", specifier = "==2.6.1" },
     { name = "google-genai", marker = "extra == 'llm'", specifier = ">=1.0,<2" },
+    { name = "matplotlib", marker = "extra == 'fem'", specifier = ">=3.9,<4" },
     { name = "plotly", marker = "extra == 'ui'", specifier = ">=5.24,<7" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.3,<10" },
     { name = "streamlit", marker = "extra == 'ui'", specifier = ">=1.40,<2" },
     { name = "trimesh", marker = "extra == 'ui'", specifier = ">=4.5,<5" },
 ]
-provides-extras = ["test", "cad", "ui", "llm"]
+provides-extras = ["test", "cad", "ui", "llm", "fem"]
 
 [[package]]
 name = "aiohappyeyeballs"

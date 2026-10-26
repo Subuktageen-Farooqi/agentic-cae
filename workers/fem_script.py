@@ -132,9 +132,12 @@ def solve(job):
         mesher.get_tmp_file_paths(str(directory / "mesh"), True)
         mesher.get_gmsh_command()
         mesher.write_gmsh_input_files()
-        error = mesher.run_gmsh_with_geo()
-        if error:
-            raise RuntimeError("Gmsh failed: " + str(error))
+        mesh_command = [job["gmsh"], "-", mesher.temp_file_geo]
+        meshing = subprocess.run(mesh_command, capture_output=True, text=True, timeout=job["timeout"])
+        (directory / "gmsh.log").write_text(json.dumps({"command": mesh_command, "exit_code": meshing.returncode}) +
+                                            "\n" + meshing.stdout + "\n" + meshing.stderr, encoding="utf-8")
+        if meshing.returncode != 0 or not Path(mesher.temp_file_mesh).is_file():
+            raise RuntimeError("Gmsh failed; see gmsh.log")
         mesher.read_and_set_new_mesh()
         document.recompute()
         if mesh.FemMesh.NodeCount <= 0 or mesh.FemMesh.VolumeCount <= 0:
@@ -170,7 +173,8 @@ def solve(job):
         inp.write_text(original, encoding="utf-8")
         run = subprocess.run([job["ccx"], "-i", inp.stem], cwd=inp.parent, capture_output=True, text=True,
                              timeout=job["timeout"], env={**os.environ, "OMP_NUM_THREADS": "2"})
-        (directory / "calculix.log").write_text(run.stdout + "\n" + run.stderr, encoding="utf-8")
+        (directory / "calculix.log").write_text(json.dumps({"command": [job["ccx"], "-i", inp.stem],
+            "working_directory": str(inp.parent), "exit_code": run.returncode}) + "\n" + run.stdout + "\n" + run.stderr, encoding="utf-8")
         if run.returncode != 0 or "*ERROR" in (run.stdout + run.stderr).upper():
             raise RuntimeError("CalculiX failed; see calculix.log")
         frd, dat = inp.with_suffix(".frd"), inp.with_suffix(".dat")
@@ -185,6 +189,13 @@ def solve(job):
             raise RuntimeError("Imported FEM results lack displacement or von Mises stress")
         document.getObject("CalculiX").WorkingDir = str(Path(job["publication_directory"]) / "solver")
         document.saveAs(str(directory / "analysis.FCStd"))
+        gmsh_version = subprocess.run([job["gmsh"], "--version"], capture_output=True, text=True, timeout=15)
+        write_json(directory / "execution.json", {"freecad": {"executable": job["freecad_executable"], "version": ".".join(App.Version()[:3])},
+            "gmsh": {"executable": job["gmsh"], "version": (gmsh_version.stdout or gmsh_version.stderr).strip(), "command": mesh_command},
+            "calculix": {"executable": job["ccx"], "version": ".".join(map(str, tools.get_ccx_version())),
+                         "command": [job["ccx"], "-i", inp.stem], "working_directory": str(inp.parent)},
+            "freecad_command": [job["freecad_executable"], __file__], "input_job_environment": "CAE_FEM_JOB",
+            "note": "Short native staging paths are recorded as executed; solver input/output is published in this analysis directory."})
         write_json(directory / "solver_results.json", {"completed": True,
             "freecad_version": ".".join(App.Version()[:3]), "solver_version": tools.get_ccx_version(),
             "maximum_displacement_mm": max(result.DisplacementLengths),

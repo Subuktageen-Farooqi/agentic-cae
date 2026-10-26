@@ -20,13 +20,17 @@ def cad_parameters(spec: DesignSpec) -> dict[str, float]:
 
 def create_cad(*, spec: DesignSpec, attempt_id: str, revision_id: str, provider: VisionTextProvider,
                images: Sequence[ImagePayload] = (), previous: CADGeneration | None = None,
-               technical_error: str | None = None) -> CADGeneration:
+               technical_error: str | None = None, previous_revision: CADGeneration | None = None,
+               design_feedback: dict | None = None) -> CADGeneration:
     if previous and (previous.technical_repair_count >= 1 or not technical_error):
         raise ValueError("One technical repair per generated revision; actual failure evidence is required")
     payload = {"spec": spec.model_dump(mode="json"), "parameters_mm_or_degrees": cad_parameters(spec),
                "reply_schema": CADReply.model_json_schema(), "allowed_cadquery_methods": sorted(ALLOWED_METHODS)}
     if previous:
         payload.update(previous_code=previous.code, technical_error=technical_error)
+    if previous_revision:
+        payload.update(previous_revision_code=previous_revision.code, design_feedback=design_feedback,
+                       revision_instruction="Propose a reasoned revision from the requirements and saved feedback. Explain what changed; do not invent a reason for thumbs-only rejection.")
     raw = provider.generate(system_instruction="""Return JSON with code and explanation for one supported solid.
 Code must contain only def build(params), returning a CadQuery Workplane shape.
 The trusted worker supplies cq (cadquery), params, imports, exports and paths.

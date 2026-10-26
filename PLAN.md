@@ -14,7 +14,7 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), including the user-approved Fre
 
 All current and future solver requirements use FreeCAD FEM with CalculiX. No solver license or Python solver-client package is required.
 
-Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever solve verified; four review fixes regression-tested. M6 is implemented and locally tested, with live Vertex and actual generated-code container execution still blocked. The next independent milestone is M7; exact evidence and limitations are in [STATUS.md](./STATUS.md).
+Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever solve verified; four review fixes regression-tested. M6 is implemented and locally tested, with live Vertex and actual generated-code container execution still blocked. M7 review/feedback/acceptance/restarts are now implemented and locally tested; the real app/FEM reference journey is verified. Finish broader M8 analysis advising next; exact evidence and limitations are in [STATUS.md](./STATUS.md).
 
 | Milestone | Delivered behavior | Verification | Manual check |
 | --- | --- | --- | --- |
@@ -35,3 +35,7 @@ Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever 
 - Verify current Google Gen AI SDK/Vertex model availability before implementing the provider in M5. Use ADC, configurable project/location/model, and local RAG embeddings; never require an OpenAI key.
 - Before each milestone reread the relevant spec: M1 §§8,20–24; M2 §§2,9–12,23; M3 §§15–19,23; M4 §§4,6,20; M5 §§5–8,24; M6 §§8–12; M7 §§12–14; M8 §§15–18; M9 entire spec and verification/handoff sections.
 - Finish and verify one milestone before starting the next. At each boundary report what works, actual tests, blocked/unverified items, user checks and the next milestone. Detailed evidence and the exact next action live in [STATUS.md](./STATUS.md).
+
+## Current verification boundary
+
+M7 transaction/restart and feedback-role tests include labeled synthetic/provider fixtures. The trusted reference geometry path has a real AppTest/browser demonstration through actual FreeCAD FEM/Gmsh/CalculiX results and report. Live Gemini/container feedback regeneration is blocked. The limited M8 static input/actual-region review/confirmation/result UI was implemented to complete the requested integration; advisor-led analysis planning and broader coverage remain pending. See [FEM_INTEGRATION_REPORT.md](./FEM_INTEGRATION_REPORT.md).

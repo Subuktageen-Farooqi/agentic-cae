@@ -291,6 +291,37 @@ class DesignFeedback(Contract):
         return self
 
 
+class DesignReview(Contract):
+    attempt_id: Nonempty
+    revision_id: Nonempty
+    brief_version: Annotated[int, Field(ge=1)]
+    spec_id: Nonempty
+    spec_version: Annotated[int, Field(ge=1)]
+    cad_manifest_id: Nonempty
+    freecad_manifest_id: Nonempty
+    geometry_hash: Digest
+    checks: list[RuleResult]
+    source: Literal["generated_container", "trusted_reference"] = "generated_container"
+
+
+class DesignAcceptance(Contract):
+    acceptance_id: str = Field(default_factory=new_id)
+    attempt_id: Nonempty
+    revision_id: Nonempty
+    geometry_hash: Digest
+    step_relative_path: Nonempty
+    cad_manifest_id: Nonempty
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class RestartDecision(Contract):
+    decision_id: str = Field(default_factory=new_id)
+    previous_attempt_id: Nonempty
+    new_attempt_id: Nonempty
+    choice: Literal["approved_brief", "brainstorm", "original_idea"]
+    brief_version: Annotated[int, Field(ge=1)]
+
+
 class AnalysisType(StrEnum):
     LINEAR_STATIC = "linear_static_structural"
     MODAL = "modal"

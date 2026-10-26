@@ -14,12 +14,13 @@ test = ["pytest>=8.3,<10"]
 cad = ["cadquery==2.6.1"]
 ui = ["streamlit>=1.40,<2", "plotly>=5.24,<7", "trimesh>=4.5,<5"]
 llm = ["google-genai>=1.0,<2"]
+fem = ["matplotlib>=3.9,<4"]
 
 [project.scripts]
 agentic-cae = "cli:main"
 
 [tool.setuptools]
-py-modules = ["schemas", "storage", "workflow", "config", "cli", "app", "app_logic", "reporting", "generation"]
+py-modules = ["schemas", "storage", "workflow", "config", "cli", "app", "app_logic", "reporting", "generation", "review", "fem_workflow", "app_views"]
 
 [tool.setuptools.packages.find]
 include = ["workers*", "rules*", "examples*", "rag*", "agents*", "providers*", "analysis*"]
@@ -27,3 +28,4 @@ include = ["workers*", "rules*", "examples*", "rag*", "agents*", "providers*", "
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["real_integration: executes real installed CAD/FEM tools without provider or solver doubles"]
