@@ -1,0 +1,239 @@
+"""Streamlit application shell for persistent intake and route selection."""
+
+from __future__ import annotations
+
+import json
+
+import streamlit as st
+
+from agents.advisor import (accept_choice, advise, apply_reply_to_brief,
+                            grounded_local_fallback, should_retrieve)
+from app_logic import dimensions_from_lines, draft_brief, requirements_from_lines
+from config import Config
+from providers.vertex import ImagePayload, ProviderUnavailable, VertexGeminiProvider
+from rag.retriever import LocalHybridRetriever
+from schemas import ChatMessage, DesignBrief, Intake, WorkflowState
+from storage import ConflictError, Store, Upload
+from workflow import Workflow
+
+
+st.set_page_config(page_title="Agentic CAE", layout="wide")
+config = Config.from_env()
+store = Store(config.data_dir)
+flow = Workflow(store)
+
+
+def rerun() -> None:
+    st.rerun()
+
+
+def route_to(target: WorkflowState, **kwargs) -> None:
+    project = store.project(st.session_state.project_id)
+    flow.transition(project["project_id"], target, expected_version=project["row_version"],
+                    reason=kwargs.pop("reason"), **kwargs)
+
+
+st.title("Agentic CAE")
+st.caption("Persistent mechanical design workflow prototype")
+
+projects = store.projects()
+with st.sidebar:
+    st.subheader("Sessions")
+    labels = {item["project_id"]: f"{item['project_id'][:8]} · {item['state']}" for item in projects}
+    choices = ["New project", *labels]
+    selected = st.selectbox("Open a persisted session", choices,
+                            format_func=lambda value: labels.get(value, value))
+    if selected == "New project":
+        if st.button("Start new intake"):
+            st.session_state.pop("project_id", None)
+            rerun()
+    elif st.button("Open selected session"):
+        st.session_state.project_id = selected
+        rerun()
+
+project_id = st.session_state.get("project_id")
+if not project_id:
+    st.header("Tell us what you want to design")
+    st.write("An incomplete idea is welcome. The engineering advisor is intended to help discover missing choices.")
+    with st.form("intake", clear_on_submit=False):
+        idea = st.text_area("What do you want to design?", placeholder="A small support bracket for…")
+        purpose = st.text_area("Purpose and intended use (optional)")
+        hard = st.text_area("Known hard requirements — one per line (optional)")
+        soft = st.text_area("Known preferences — one per line (optional)")
+        units = st.selectbox("Known dimension units (optional)", ["Not specified", "mm", "m", "in"])
+        dimensions = st.text_area("Known dimensions — one per line, for example: length = 100 mm (optional)")
+        material = st.text_input("Material preference (optional)")
+        manufacturing = st.text_input("Manufacturing preference (optional)")
+        files = st.file_uploader("Reference images (optional, multiple)",
+                                 type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
+        submitted = st.form_submit_button("Save idea and continue", type="primary")
+    if submitted:
+        if not idea.strip():
+            st.error("Describe the idea in at least a few words.")
+        else:
+            try:
+                selected_units = None if units == "Not specified" else units
+                intake = Intake(
+                    idea=idea.strip(), purpose=purpose.strip(),
+                    hard_requirements=requirements_from_lines(hard, "HARD"),
+                    soft_requirements=requirements_from_lines(soft, "SOFT"),
+                    dimensions=dimensions_from_lines(dimensions, selected_units), units=selected_units,
+                    material_preferences=[material.strip()] if material.strip() else [],
+                    manufacturing_preferences=[manufacturing.strip()] if manufacturing.strip() else [],
+                )
+                uploads = [Upload(file.name, file.type, file.getvalue()) for file in files]
+                project_id = store.create_project(intake, uploads)
+                project = store.project(project_id)
+                flow.transition(project_id, WorkflowState.ROUTE_SELECTION,
+                                expected_version=project["row_version"], reason="Intake saved")
+                st.session_state.project_id = project_id
+                rerun()
+            except ValueError as error:
+                st.error(str(error))
+    st.stop()
+
+project = store.project(project_id)
+intake = store.original_intake(project_id)
+st.caption(f"Session `{project_id}` · state **{project['state'].value}**")
+
+if project["state"] == WorkflowState.ROUTE_SELECTION:
+    st.header("Choose how to continue")
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Brainstorm with our AI Mechanical Engineering Maestro")
+        st.write("Explore mechanisms, joints, materials, manufacturing methods, and design trade-offs with an AI advisor supported by a mechanical engineering knowledge base. Together, refine your idea into a clearer design brief.")
+        if st.button("Open engineering advisor", use_container_width=True):
+            brief = draft_brief(intake, automatic=False)
+            store.save_brief(project_id, brief, expected_version=0, actor="user_route",
+                             reason="Initialize shared advisor brief")
+            route_to(WorkflowState.ADVISOR_CHAT, route="advisor", reason="User selected advisor route")
+            rerun()
+    with right:
+        st.subheader("Design it for me—I trust your judgment")
+        st.write("Start from your description. The AI will choose reasonable defaults and clearly record its assumptions.")
+        if st.button("Draft automatically", type="primary", use_container_width=True):
+            brief = draft_brief(intake, automatic=True)
+            store.save_brief(project_id, brief, expected_version=0, actor="automatic_route",
+                             reason="Create automatic-route brief with visible assumptions")
+            route_to(WorkflowState.BRIEF_READY, route="automatic", reason="User selected automatic route")
+            route_to(WorkflowState.SPEC_GENERATION, reason="Automatic route enters specification generation")
+            rerun()
+    st.stop()
+
+if project["state"] == WorkflowState.ADVISOR_CHAT:
+    index_path = config.data_dir / "knowledge" / "index.json"
+    if not index_path.is_file():
+        st.error("The knowledge index is missing. Run: python -m cli knowledge-update")
+        st.stop()
+    retriever = LocalHybridRetriever(index_path)
+    provider = VertexGeminiProvider(config)
+    provider_issues = provider.availability_issues()
+    if provider_issues:
+        st.warning("Vertex Gemini is blocked: " + "; ".join(provider_issues) +
+                   ". The workspace will show clearly labeled local retrieval evidence only.")
+    else:
+        st.info("Vertex Gemini is configured. A live request will verify ADC and model availability when you send a message.")
+    chat, brief_column = st.columns([1, 1])
+    with chat:
+        st.subheader("Engineering advisor")
+        history = list(store.records(project_id, "ChatMessage"))
+        for message in history:
+            with st.chat_message(message.role):
+                st.write(message.text)
+                if message.sources:
+                    with st.expander("Sources"):
+                        for source in message.sources:
+                            st.markdown(f"- `{source.chunk_id}` — {source.title}, {source.section_or_page or 'section unavailable'} ({source.source_kind})")
+        message_images = st.file_uploader("Images for the next advisor message (optional)",
+                                          type=["png", "jpg", "jpeg", "webp"],
+                                          accept_multiple_files=True, key="advisor-images")
+        question = st.chat_input("Ask about mechanisms, joints, materials, manufacture, or trade-offs")
+        if question:
+            saved_images = [store.save_image(project_id, Upload(file.name, file.type, file.getvalue()))
+                            for file in message_images]
+            current = store.brief(project_id)
+            if saved_images:
+                current = current.model_copy(update={"version": current.version + 1,
+                                                     "reference_image_ids": current.reference_image_ids +
+                                                     [image.image_id for image in saved_images]})
+                store.save_brief(project_id, current, expected_version=current.version - 1,
+                                 actor="user", reason="Attach advisor reference images")
+            user_message = ChatMessage(role="user", text=question,
+                                       image_ids=[image.image_id for image in saved_images],
+                                       brief_version=current.version)
+            store.save_record(project_id, user_message.message_id, 1, user_message)
+            image_payloads = [ImagePayload(data=store.read_image(project_id, image.image_id),
+                                           media_type=image.media_type, role=image.role,
+                                           image_id=image.image_id) for image in saved_images]
+            hits = retriever.search(question) if should_retrieve(question) else []
+            try:
+                if provider_issues:
+                    reply = grounded_local_fallback(question, hits)
+                else:
+                    reply = advise(provider=provider, retriever=retriever, brief=current,
+                                   history=[*history, user_message], message=question, images=image_payloads)
+            except ProviderUnavailable as error:
+                local = grounded_local_fallback(question, hits)
+                reply = local.model_copy(update={"text": f"Vertex Gemini is BLOCKED: {error}\n\n{local.text}"})
+            updated = apply_reply_to_brief(current, reply)
+            store.save_brief(project_id, updated, expected_version=current.version,
+                             actor="advisor", reason=f"Advisor response in {reply.mode} mode")
+            assistant = ChatMessage(role="assistant", text=reply.text, sources=reply.sources,
+                                    brief_version=updated.version)
+            store.save_record(project_id, assistant.message_id, 1, assistant)
+            rerun()
+    with brief_column:
+        current = store.brief(project_id)
+        st.subheader("Living design brief")
+        with st.form(f"brief-{current.version}"):
+            name = st.text_input("Design name", current.design_name)
+            description = st.text_area("Description", current.description)
+            purpose = st.text_area("Purpose", current.purpose)
+            assumptions = st.text_area("Assumptions", "\n".join(current.assumptions))
+            questions = st.text_area("Unresolved questions", "\n".join(current.unresolved_questions))
+            save = st.form_submit_button("Save brief changes")
+        if save:
+            updated = DesignBrief.model_validate({**current.model_dump(), "version": current.version + 1,
+                                                  "design_name": name.strip(), "description": description.strip(),
+                                                  "purpose": purpose.strip(),
+                                                  "assumptions": [line for line in assumptions.splitlines() if line.strip()],
+                                                  "unresolved_questions": [line for line in questions.splitlines() if line.strip()]})
+            try:
+                store.save_brief(project_id, updated, expected_version=current.version,
+                                 actor="user", reason="Direct living-brief edit")
+                rerun()
+            except ConflictError:
+                st.error("The brief changed in another action. Reload and reconcile your edit.")
+        if current.proposed_choices:
+            st.subheader("Proposed choices")
+            for decision in current.proposed_choices:
+                if st.button(f"Accept: {decision.text}", key=f"accept-{decision.decision_id}"):
+                    accepted = accept_choice(current, decision.decision_id)
+                    store.save_brief(project_id, accepted, expected_version=current.version,
+                                     actor="user", reason=f"Accept proposed choice {decision.decision_id}")
+                    rerun()
+    st.button("Continue brainstorming", disabled=True,
+              help="Send another message in the advisor input to continue")
+    if st.button("Generate this design", type="primary"):
+        route_to(WorkflowState.BRIEF_READY, reason="User froze the current brief")
+        route_to(WorkflowState.SPEC_GENERATION, reason="Frozen brief enters specification generation")
+        rerun()
+    if st.button("Switch to automatic design"):
+        current = store.brief(project_id)
+        updated = current.model_copy(update={"version": current.version + 1,
+                                             "assumptions": current.assumptions + ["Automatic design may choose supported defaults and will record them."]})
+        store.save_brief(project_id, updated, expected_version=current.version,
+                         actor="user", reason="Switch advisor workspace to automatic design")
+        route_to(WorkflowState.BRIEF_READY, reason="Switch to automatic generation")
+        route_to(WorkflowState.SPEC_GENERATION, reason="Automatic design enters specification generation")
+        rerun()
+    st.stop()
+
+if project["state"] == WorkflowState.SPEC_GENERATION:
+    brief = store.brief(project_id)
+    st.header("Specification generation")
+    st.warning("The brief is persisted and frozen for generation. The real Vertex specification writer is not implemented until M6; no generation is being claimed or silently repeated.")
+    st.json(json.loads(brief.model_dump_json()))
+    st.stop()
+
+st.info("This persisted state is implemented by a later milestone. No expensive job was started automatically.")
