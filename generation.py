@@ -63,7 +63,8 @@ def enqueue_generation(store: Store, project_id: str, *, request_key: str | None
     return store.enqueue(project_id, key, "DESIGN_GENERATION", payload)
 
 
-def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvider, config: Config):
+def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvider, config: Config,
+                       allow_technical_repair: bool = True):
     job = store.claim(job_id, owner := "generation-" + new_id())
     if job is None:
         return store.job(job_id)
@@ -158,7 +159,7 @@ def run_generation_job(*, store: Store, job_id: str, provider: VisionTextProvide
             except (CodeRejected, CADBuildError, RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as error:
                 failure = "".join(traceback.format_exception(error))[-12000:]
                 store.write_once(relative + f"/technical-error-{repair}.txt", failure.encode())
-                if repair == 1:
+                if repair == 1 or not allow_technical_repair:
                     raise
                 store.consume_technical_repair(revision["revision_id"])
                 previous = generation

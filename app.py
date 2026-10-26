@@ -11,7 +11,8 @@ from agents.advisor import (accept_choice, advise, apply_reply_to_brief,
                             explicit_dimension_edit, grounded_local_fallback, should_retrieve)
 from app_logic import dimensions_from_lines, draft_brief, requirements_from_lines
 from config import Config
-from providers.vertex import ImagePayload, ProviderUnavailable, VertexGeminiProvider
+from providers.vertex import ImagePayload, ProviderUnavailable
+from providers.factory import make_provider
 from rag.retriever import LocalHybridRetriever
 from schemas import ChatMessage, DesignBrief, Intake, WorkflowState
 from storage import ConflictError, Store, Upload
@@ -175,13 +176,13 @@ if project["state"] == WorkflowState.ADVISOR_CHAT:
         st.error("The knowledge index is missing. Run: python -m cli knowledge-update")
         st.stop()
     retriever = LocalHybridRetriever(index_path)
-    provider = VertexGeminiProvider(config)
+    provider = make_provider(config)
     provider_issues = provider.availability_issues()
     if provider_issues:
-        st.warning("Vertex Gemini is blocked: " + "; ".join(provider_issues) +
+        st.warning("Gemini is blocked: " + "; ".join(provider_issues) +
                    ". The workspace will show clearly labeled local retrieval evidence only.")
     else:
-        st.info("Vertex Gemini is configured. A live request will verify ADC and model availability when you send a message.")
+        st.info("Gemini is configured. Sending a message makes a live request to the selected provider.")
     chat, brief_column = st.columns([1, 1])
     with chat:
         st.subheader("Engineering advisor")
@@ -227,7 +228,7 @@ if project["state"] == WorkflowState.ADVISOR_CHAT:
                                    history=[*history, user_message], message=question, images=image_payloads)
             except ProviderUnavailable as error:
                 local = grounded_local_fallback(question, hits)
-                reply = local.model_copy(update={"text": f"Vertex Gemini is BLOCKED: {error}\n\n{local.text}"})
+                reply = local.model_copy(update={"text": f"Gemini is BLOCKED: {error}\n\n{local.text}"})
             updated = apply_reply_to_brief(current, reply)
             store.save_brief(project_id, updated, expected_version=current.version,
                              actor="advisor", reason=f"Advisor response in {reply.mode} mode")
@@ -305,7 +306,7 @@ if project["state"] in GENERATION_STATES or generation_blocked:
     brief = store.brief(project_id)
     st.header("Specification generation")
     st.caption(f"Frozen brief v{brief.version}. Generated code runs only inside the configured restricted container.")
-    provider = VertexGeminiProvider(config)
+    provider = make_provider(config)
     issues = provider.availability_issues()
     job = latest_generation(store, project_id)
     if job is None and issues:

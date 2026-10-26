@@ -38,7 +38,7 @@ def render_design_review(store, project_id, project, config, executor):
     import streamlit as st
     from review import current_review, review_artifacts, accept_design, reject_design
     from generation import run_generation_job
-    from providers.vertex import VertexGeminiProvider
+    from providers.factory import make_provider
     from schemas import DesignFeedback
     from storage import Upload
     review = current_review(store, project_id)
@@ -78,7 +78,7 @@ def render_design_review(store, project_id, project, config, executor):
         job = reject_design(store, project_id, feedback, expected_version=project["row_version"])
         if job:
             executor.submit(run_generation_job, store=store, job_id=job.job_id,
-                            provider=VertexGeminiProvider(config), config=config)
+                            provider=make_provider(config), config=config)
         st.rerun()
 
 
@@ -117,6 +117,7 @@ def render_analysis(store, project_id, project, config, executor):
         return
     if project["state"] == S.ANALYSIS_INTAKE:
         st.header("What do you want to learn about this design?")
+        render_analysis_conversation(store, project_id, project, config, executor, review)
         st.info("Executable: linear static structural. Modal, vibration, fatigue and transient execution are not yet supported.")
         st.write("Supported setup: fixed minimum-X face, resultant force on maximum-X face, quadratic tetrahedral mesh.")
         st.write("Reference steel: E = 200000 MPa, Poisson ratio = 0.3, density = 7900 kg/m³.")
@@ -199,6 +200,22 @@ def render_analysis(store, project_id, project, config, executor):
         displayed = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", report)
         displayed = re.sub(r"\[([^\]]+)\]\((?!https?://)[^)]+\)", r"`\1`", displayed)
         st.markdown(displayed)
+        explanations = [e for e in store.records(project_id, "ReportExplanation") if e.run_id == result.run_id]
+        for explanation in explanations:
+            st.markdown("**AI explanation — refer to the numerical report for authoritative values**")
+            st.write(explanation.text)
+        if result.status == "succeeded" and not explanations:
+            from providers.factory import make_provider
+            provider = make_provider(config)
+            if st.button("Explain these results with AI", disabled=bool(provider.availability_issues())):
+                from agents.report_explainer import explain_report
+                from providers.vertex import ProviderUnavailable
+                try:
+                    explain_report(store=store, project_id=project_id, spec=spec, result=result, provider=provider)
+                except (ProviderUnavailable, ValueError) as error:
+                    st.error(str(error))
+                else:
+                    st.rerun()
         for filename in ("integration_report.md", "report.md", "results.json", "analysis.FCStd", "verification.json", "execution.json",
                          "gmsh.log", "calculix.log", "solver/Mesh.inp", "solver/Mesh.frd", "solver/Mesh.dat", *result.image_paths):
             path = directory / filename
@@ -218,3 +235,74 @@ def render_analysis(store, project_id, project, config, executor):
         if st.button("Review analysis inputs again"):
             edit_analysis_inputs(store,project_id,expected_version=project["row_version"])
             st.rerun()
+
+
+def render_analysis_conversation(store, project_id, project, config, executor, review):
+    """Explicit submissions only: rendering/reopening never calls Gemini."""
+    import streamlit as st
+    from agents.analysis_planner import plan_analysis
+    from fem_workflow import enqueue_prepare, run_fem_job
+    from providers.factory import make_provider
+    from providers.vertex import ProviderUnavailable
+    from schemas import AnalysisInputs, AnalysisType, AcceptanceLimit
+    plans = [p for p in store.records(project_id, "AnalysisPlan")
+             if (p.accepted_revision_id, p.geometry_hash) == (review.revision_id, review.geometry_hash)]
+    with st.expander("Analysis advisor and missing inputs", expanded=bool(plans)):
+        st.caption("Recommendations use the accepted design and verified material. Submit explicitly to call Gemini. You can also use the manual setup below.")
+        for plan in plans:
+            with st.chat_message("user"):
+                st.write(plan.user_message)
+            with st.chat_message("assistant"):
+                st.write(plan.text)
+                st.dataframe([{"Analysis": r.name, "Question": r.engineering_question,
+                    "Why relevant": r.why_relevant, "Required inputs": ", ".join(r.required_inputs),
+                    "Execution supported": r.execution_supported} for r in plan.recommendations],
+                    hide_index=True, alt="Analysis recommendations and execution support")
+                for question in plan.questions:
+                    st.write(question)
+                if plan.missing_inputs:
+                    st.warning("Still needed: " + ", ".join(plan.missing_inputs))
+        provider = make_provider(config)
+        issues = provider.availability_issues()
+        if issues:
+            st.info("Analysis advisor blocked: " + "; ".join(issues))
+        with st.form("analysis-conversation-" + review.revision_id):
+            message = st.text_area("Ask about analyses or answer the advisor's questions")
+            question = st.text_input("Analysis question to answer")
+            kind = st.selectbox("Analysis type", ["Not selected", *[t.value for t in AnalysisType]])
+            material = st.checkbox("Select sourced generic reference steel for this analysis")
+            supports = st.checkbox("Fix the minimum-X face and apply the resultant to the maximum-X face")
+            known_force = st.checkbox("I have specified the force components below")
+            force = tuple(st.number_input("Specified force " + axis + " (N)", value=0., step=1.) for axis in ("X", "Y", "Z"))
+            known_mesh = st.checkbox("Use the specified quadratic mesh size below")
+            mesh = st.number_input("Specified mesh size (mm)", min_value=.1, value=3., step=.5)
+            use_limit = st.checkbox("I have a maximum displacement acceptance limit")
+            limit = st.number_input("Maximum permitted displacement (mm)", min_value=.0001, value=1., format="%.4f")
+            submitted = st.form_submit_button("Ask analysis advisor", disabled=bool(issues))
+        if submitted:
+            if not message.strip():
+                st.error("Enter a question or response first.")
+            else:
+                inputs = AnalysisInputs(engineering_question=question,
+                    analysis_type=None if kind == "Not selected" else kind,
+                    material_id="freecad-generic-steel" if material else None,
+                    support_kind="planar_min_x" if supports else None,
+                    load_kind="planar_max_x" if supports else None,
+                    force_n=force if known_force else None, mesh_mm=mesh if known_mesh else None,
+                    acceptance_limits=[AcceptanceLimit(quantity="maximum_displacement_mm", maximum=limit)] if use_limit else [])
+                try:
+                    plan_analysis(store=store, project_id=project_id, inputs=inputs, message=message,
+                                  provider=provider, expected_version=project["row_version"])
+                except (ProviderUnavailable, ValueError) as error:
+                    st.error(str(error))
+                else:
+                    st.rerun()
+        used = {s.analysis_id for s in store.records(project_id, "AnalysisSpec")}
+        if plans and plans[-1].specification is not None and plans[-1].specification.analysis_id not in used:
+            proposal = plans[-1].specification
+            st.caption("Saved proposed setup. Preparing regions does not authorize a solve.")
+            st.json(proposal.model_dump(mode="json"))
+            if st.button("Prepare advisor's proposed regions"):
+                job = enqueue_prepare(store, project_id, proposal, expected_version=project["row_version"])
+                executor.submit(run_fem_job, store=store, job_id=job.job_id, config=config)
+                st.rerun()

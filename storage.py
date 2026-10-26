@@ -21,7 +21,7 @@ import time
 from typing import Iterator, Sequence
 
 from schemas import (
-    AnalysisRecommendation, AnalysisResults, AnalysisSpec, ArtifactManifest,
+    AnalysisRecommendation, AnalysisResults, AnalysisSpec, AnalysisPlan, ReportExplanation, ArtifactManifest,
     CADGeneration, ChatMessage, Contract, DesignBrief, DesignFeedback, DesignSpec,
     GeometryMetrics, ImageReference, Intake, Job, JobStatus, RuleResult,
     WorkflowState, FEMPreparation, DesignReview, DesignAcceptance, RestartDecision, new_id, utc_now,
@@ -46,7 +46,7 @@ class Upload:
 
 RECORD_TYPES = {c.__name__: c for c in (
     DesignBrief, DesignSpec, CADGeneration, GeometryMetrics, RuleResult,
-    DesignFeedback, AnalysisRecommendation, AnalysisSpec, AnalysisResults,
+    DesignFeedback, AnalysisRecommendation, AnalysisSpec, AnalysisResults, AnalysisPlan, ReportExplanation,
     ArtifactManifest, ChatMessage, FEMPreparation, DesignReview, DesignAcceptance, RestartDecision,
 )}
 

@@ -37,7 +37,7 @@ def test_advisor_route_opens_shared_editable_brief_with_honest_blocked_notice(mo
     assert not app.exception
     assert "Engineering advisor" in [item.value for item in app.subheader]
     assert "Living design brief" in [item.value for item in app.subheader]
-    assert any("Vertex Gemini is blocked" in notice.value for notice in app.warning)
+    assert any("Gemini is blocked" in notice.value for notice in app.warning)
     assert any(item.label == "Generate this design" for item in app.button)
 
 

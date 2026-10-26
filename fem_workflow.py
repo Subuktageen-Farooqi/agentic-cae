@@ -81,14 +81,26 @@ def enqueue_solve(store, project_id, spec, preparation, *, expected_version, con
         return job
 
 
-def numerical_checks(spec, results, review, design_spec):
+def numerical_checks(spec, results, review, design_spec, metrics=None):
     applied = tuple(sum(load.force_n[i] for load in spec.loads) for i in range(3))
     residual = reaction_imbalance_n(applied, results.reaction_force_n)
     checks = {"applied_force_n": applied, "reaction_force_n": results.reaction_force_n,
               "reaction_residual_n": residual, "reaction_residual_magnitude_n": vector_magnitude(residual),
               "reaction_relative_residual": vector_magnitude(residual) / sum(vector_magnitude(load.force_n) for load in spec.loads),
-              "beam_applicable": False, "beam_reason": "Elementary rectangular beam comparison is limited to the repository-authored reference cantilever."}
-    if review.source == "trusted_reference" and applied[0] == applied[1] == 0:
+              "beam_applicable": False, "beam_reason": "Elementary beam comparison requires the reference cantilever or a verified full rectangular-prism solid with matching dimensions and tip loading."}
+    rectangular = False
+    if metrics and metrics.bounding_box and metrics.shape_valid and metrics.solid_count == 1:
+        spans = tuple(b-a for a,b in zip(metrics.bounding_box.minimum, metrics.bounding_box.maximum))
+        # A valid solid contained in its bounds with the full box volume is a
+        # rectangular prism to this tight numerical tolerance. Do not infer a
+        # beam section from a design name, code comment, or bounding box alone.
+        box_volume = spans[0] * spans[1] * spans[2]
+        rectangular = (all(v > 0 for v in spans) and abs(metrics.volume_mm3-box_volume) <= .01
+                       and design_spec.bounding_dimensions == {"x":"length", "y":"width", "z":"height"})
+    compatible = (len(spec.supports) == len(spec.loads) == 1
+        and {s.selector_id:s.kind for s in spec.selectors}.get(spec.supports[0].selector_id) == "planar_min_x"
+        and {s.selector_id:s.kind for s in spec.selectors}.get(spec.loads[0].selector_id) == "planar_max_x")
+    if (review.source == "trusted_reference" or rectangular) and compatible and applied[0] == applied[1] == 0:
         dims = {d.name: d.value * {"mm": 1, "m": 1000, "in": 25.4}.get(d.unit, 1) for d in design_spec.dimensions}
         estimate = cantilever_tip_displacement_mm(force_n=abs(applied[2]), length_mm=dims["length"],
             youngs_modulus_mpa=spec.material.youngs_modulus_mpa,
@@ -160,7 +172,7 @@ def run_fem_job(*, store, job_id, config):
         if result.status == "succeeded":
             if result.provenance != "actual_solver":
                 raise IntegrityError("A successful app integration requires actual solver evidence")
-            checks = numerical_checks(spec, result, review, artifacts["spec"])
+            checks = numerical_checks(spec, result, review, artifacts["spec"], artifacts["metrics"])
             store.write_once(relative + "/verification.json", json.dumps(checks, indent=2).encode())
             report = render_report(spec, result) + verification_markdown(checks)
             execution = json.loads((directory / "execution.json").read_text(encoding="utf-8"))

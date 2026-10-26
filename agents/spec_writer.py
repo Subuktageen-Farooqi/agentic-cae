@@ -1,4 +1,4 @@
-"""Vertex role: a frozen brief becomes a validated, requirement-preserving spec."""
+"""Gemini role: a frozen brief becomes a validated, requirement-preserving spec."""
 from __future__ import annotations
 
 import json

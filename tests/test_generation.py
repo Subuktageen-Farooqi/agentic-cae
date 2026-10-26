@@ -153,6 +153,18 @@ def test_dependency_block_consumes_no_repair_and_explicit_retry_preserves_attemp
     assert second.result["attempt_id"] != first.result["attempt_id"] and old_path.read_bytes() == original
 
 
+def test_live_mode_failure_never_requests_a_technical_repair(store,project,brief,monkeypatch):
+    frozen(store,project)
+    provider=ProviderDouble(concept(brief))
+    def failure(**kwargs): raise CADBuildError("Mocked worker failure")
+    monkeypatch.setattr("generation.execute_generated",failure)
+    result=run_generation_job(store=store,job_id=enqueue_generation(store,project).job_id,
+        provider=provider,config=Config.from_env({}),allow_technical_repair=False)
+    assert result.status==JobStatus.FAILED and len(provider.calls)==2
+    assert len(store.records(project,"CADGeneration"))==1
+    assert not any(e["kind"]=="technical_repair_consumed" for e in store.events(project))
+
+
 def test_existing_pending_generation_is_not_restarted_when_ui_reopens(store, project, brief):
     frozen(store, project)
     pending = enqueue_generation(store, project)

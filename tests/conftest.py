@@ -6,6 +6,21 @@ from schemas import DesignBrief, Intake
 from storage import Store, Upload
 
 
+@pytest.fixture(autouse=True)
+def no_live_api(monkeypatch):
+    """Default tests cannot consume quota even with a real local .env present."""
+    monkeypatch.setenv("LLM_PROVIDER", "vertex")
+    for name in ("GEMINI_API_KEY", "GEMINI_MODEL_ID", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
+        monkeypatch.setenv(name, "")
+    try:
+        from google import genai
+    except ImportError:
+        return
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Live SDK construction is forbidden in offline tests")
+    monkeypatch.setattr(genai, "Client", forbidden)
+
+
 @pytest.fixture
 def png_bytes():
     # An actual 1x1 PNG fixture; no vision interpretation is asserted by these tests.

@@ -69,7 +69,7 @@ def test_local_grounded_recommendation_cites_actual_chunks(index):
     reply = grounded_local_fallback("question", hits)
     assert reply.sources
     assert all(source.chunk_id in reply.text for source in reply.sources)
-    assert "Vertex advisor unavailable" in reply.text
+    assert "Gemini advisor unavailable" in reply.text
 
 
 def test_simple_dimension_edit_skips_retrieval_but_engineering_decision_uses_it():
@@ -163,5 +163,5 @@ def test_vertex_client_initialization_failure_is_provider_unavailable(monkeypatc
     monkeypatch.setattr(genai, "Client", fail)
     provider = VertexGeminiProvider(Config.from_env({"GOOGLE_CLOUD_PROJECT": "test",
         "GOOGLE_CLOUD_LOCATION": "global", "GEMINI_MODEL_ID": "test"}))
-    with pytest.raises(ProviderUnavailable, match="ADC initialization failed"):
+    with pytest.raises(ProviderUnavailable, match="Gemini request failed"):
         provider.generate(system_instruction="test", prompt="test")

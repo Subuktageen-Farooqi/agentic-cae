@@ -1,4 +1,4 @@
-"""Vertex role: restricted CadQuery function, with one separate repair request."""
+"""Gemini role: restricted CadQuery function, with one separate repair request."""
 import json
 from typing import Sequence
 

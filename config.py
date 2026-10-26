@@ -6,7 +6,7 @@ Reports deliberately omit environment values, credential contents and paths.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import importlib.metadata
 import json
 import os
@@ -14,6 +14,14 @@ from pathlib import Path
 import platform
 import shutil
 from typing import Mapping
+
+
+def local_podman() -> str | None:
+    if os.name == "nt":
+        candidates = list(Path(__file__).resolve().parent.glob(".tools/podman/**/podman.exe"))
+        if candidates:
+            return str(sorted(candidates)[-1])
+    return None
 
 
 @dataclass(frozen=True)
@@ -29,9 +37,14 @@ class Config:
     container_runtime: str
     worker_timeout_seconds: int
     cad_image: str = "agentic-cae-cad:2.6.1"
+    llm_provider: str = "vertex"
+    gemini_api_key: str | None = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
+        if env is None:
+            from dotenv import load_dotenv
+            load_dotenv(Path(__file__).resolve().parent / ".env", override=False, interpolate=False)
         values = os.environ if env is None else env
 
         def text(key: str) -> str | None:
@@ -47,7 +60,10 @@ class Config:
         timeout = int(text("CAE_WORKER_TIMEOUT_SECONDS") or "300")
         if timeout <= 0:
             raise ValueError("Worker timeout must be positive")
-        runtime = text("CAE_CONTAINER_RUNTIME") or "docker"
+        runtime = text("CAE_CONTAINER_RUNTIME") or ("podman" if env is None and local_podman() and not shutil.which("docker") else "docker")
+        provider = text("LLM_PROVIDER") or "vertex"
+        if provider not in ("vertex", "gemini_developer"):
+            raise ValueError("LLM_PROVIDER must be vertex or gemini_developer")
         if runtime not in ("docker", "podman"):
             raise ValueError("Container runtime must be docker or podman")
         freecad = text("FREECAD_CMD")
@@ -79,6 +95,7 @@ class Config:
             gmsh_exe=companion("GMSH_EXE", "gmsh"),
             container_runtime=runtime, worker_timeout_seconds=timeout,
             cad_image=text("CAE_CAD_IMAGE") or "agentic-cae-cad:2.6.1",
+            llm_provider=provider, gemini_api_key=text("GEMINI_API_KEY"),
         )
 
 
@@ -111,8 +128,10 @@ def diagnostics(config: Config) -> dict:
             "gmsh_found": _executable(config.gmsh_exe, ("gmsh",)),
             "execution": "unverified", "version_compatibility": "unverified",
         },
-        "container": {"executable_found": _executable(config.container_runtime, ()),
+        "container": {"executable_found": _executable(config.container_runtime, ()) or bool(config.container_runtime == "podman" and local_podman()),
                       "daemon_and_isolation": "unverified"},
+        "llm": {"provider": config.llm_provider, "api_key_configured": bool(config.gemini_api_key),
+                "execution": "unverified"},
         "vertex": {
             "project_configured": bool(config.google_project),
             "location_configured": bool(config.google_location),

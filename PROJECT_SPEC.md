@@ -5,6 +5,12 @@ Solver decision updated by the user on 2026-10-26: all analysis requirements
 use FreeCAD FEM with Gmsh and CalculiX. The full product journey and verification
 requirements remain in scope; no commercial solver license is required.
 
+Provider decision updated by the user on 2026-10-27: use the Gemini Developer
+API with a locally entered Google AI Studio key; preserve Vertex as optional.
+Load the ignored repository-root .env server-side, never expose its key, and
+keep the vision-capable model configurable. See the live verification budget
+and staged actual-region confirmation procedure in LIVE_SMOKE.md.
+
 Treat this document as the authoritative implementation brief. The shared
 conversation provides context, but do not require the user to repeat decisions
 already specified here.
@@ -996,15 +1002,16 @@ Clearly distinguish:
 Do not describe the complete product as working if the solver path is blocked.
 Do not hide core requirements behind TODOs and call the prototype complete.
 
-LLM provider decision:
-Use Google Cloud Vertex AI with a vision-capable Gemini model for the
+LLM provider decision (updated 2026-10-27):
+Use Gemini Developer API with an AI Studio API key and a vision-capable model for the
 application's advisor, specification generation, CAD code generation,
 revision, analysis planning, and report explanation.
-I have Google Cloud credits. Do not default to OpenAI or require an
-OPENAI_API_KEY.
+Preserve Google Cloud Vertex AI as an optional provider. Do not require an OpenAI key.
 
-Use configurable project ID, location, and model ID.
-Use Application Default Credentials for local development.
+Use configurable provider and model ID. In Developer API mode, read GEMINI_API_KEY
+server-side from the environment, with ignored repository-root .env loading for
+local development. Do not display or persist credentials in project records.
+In Vertex mode, use configurable project/location/model and local ADC.
 Verify current model availability and SDK usage before implementation.
 Keep the provider adapter replaceable.
 

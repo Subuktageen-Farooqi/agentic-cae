@@ -35,7 +35,7 @@ class AdvisorReply(Contract):
     sources: list[SourceReference] = Field(default_factory=list)
     dimension_updates: list[Dimension] = Field(default_factory=list)
     brief_updates: BriefUpdates = Field(default_factory=BriefUpdates)
-    mode: str = "vertex_grounded"
+    mode: str = "gemini_grounded"
 
 
 SYSTEM = """You are the mechanical engineering advisor in a bounded prototype.
@@ -110,8 +110,8 @@ def advise(*, provider: VisionTextProvider, retriever: LocalHybridRetriever,
     raw = provider.generate(system_instruction=SYSTEM, prompt=_prompt(brief, history, message, hits), images=images)
     try:
         payload = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise ProviderUnavailable("Vertex response was not valid JSON") from error
+    except json.JSONDecodeError:
+        raise ProviderUnavailable("Gemini response was not valid JSON") from None
     try:
         if not isinstance(payload, dict):
             raise ValueError("Expected a JSON object")
@@ -119,15 +119,15 @@ def advise(*, provider: VisionTextProvider, retriever: LocalHybridRetriever,
         cited_ids = payload.pop("source_chunk_ids", [])
         sources = [allowed[item] for item in cited_ids if item in allowed]
         reply = AdvisorReply.model_validate({**payload, "sources": sources})
-    except (ValidationError, ValueError, TypeError) as error:
-        raise ProviderUnavailable("Vertex advisor response did not match the validated contract") from error
+    except (ValidationError, ValueError, TypeError):
+        raise ProviderUnavailable("Gemini advisor response did not match the validated contract") from None
     if hits and not sources:
         return reply.model_copy(update={"text": reply.text + "\n\nRetrieved evidence was not cited; treat this recommendation as insufficiently grounded."})
     return reply
 
 
 def grounded_local_fallback(message: str, hits: Sequence[RetrievalHit]) -> AdvisorReply:
-    """Extractive evidence view used only when Vertex is blocked, clearly labeled."""
+    """Extractive evidence view used only when the provider is blocked, clearly labeled."""
     if not hits:
         return AdvisorReply(text="The local knowledge collection does not contain enough evidence for this decision.",
                             questions=["What function or engineering trade-off should we narrow first?"],
@@ -137,7 +137,7 @@ def grounded_local_fallback(message: str, hits: Sequence[RetrievalHit]) -> Advis
         sentence = re.split(r"(?<=[.!?])\s+", hit.text.strip())[0]
         snippets.append(f"{sentence} [{hit.reference.chunk_id}]")
     return AdvisorReply(
-        text="Local retrieved evidence (Vertex advisor unavailable):\n\n" + "\n\n".join(snippets),
+        text="Local retrieved evidence (Gemini advisor unavailable):\n\n" + "\n\n".join(snippets),
         questions=["Which of these trade-offs matters most for your design?"],
         sources=[hit.reference for hit in hits[:2]], mode="local_retrieval_only")
 

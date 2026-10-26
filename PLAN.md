@@ -14,7 +14,7 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), including the user-approved Fre
 
 All current and future solver requirements use FreeCAD FEM with CalculiX. No solver license or Python solver-client package is required.
 
-Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever solve verified; four review fixes regression-tested. M6 is implemented and locally tested, with live Vertex and actual generated-code container execution still blocked. M7 review/feedback/acceptance/restarts are now implemented and locally tested; the real app/FEM reference journey is verified. Finish broader M8 analysis advising next; exact evidence and limitations are in [STATUS.md](./STATUS.md).
+Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever solve verified; four review fixes regression-tested. M6/M7 implementation and real reference app/FEM execution are preserved. M8 now includes a persisted advisor-led analysis conversation, recommendations, missing-input gates, exact-geometry proposals and optional report explanations. Developer API and optional Vertex use the same role contracts. Live Gemini and actual generated-code container execution remain unverified; Windows WSL2 currently blocks the container engine. Next is the zero-quota container check followed by the single staged five-request live journey in [LIVE_SMOKE.md](./LIVE_SMOKE.md). Exact evidence is in [STATUS.md](./STATUS.md).
 
 | Milestone | Delivered behavior | Verification | Manual check |
 | --- | --- | --- | --- |
@@ -32,7 +32,7 @@ Changeover outcome: real FreeCAD 1.1.4 / Gmsh 4.15.0 / CalculiX 2.22 cantilever 
 
 - Missing FreeCAD, container, Gemini credentials or FreeCAD FEM with CalculiX block their actual executions, not independent milestones. Implement adapters with explicit BLOCKED results; never fabricate geometry, citations or solver values.
 - Do not execute generated CAD in an ordinary subprocess and call it a security sandbox. Use an isolated runtime with no network/secrets, limited mounts and resource/time limits.
-- Verify current Google Gen AI SDK/Vertex model availability before implementing the provider in M5. Use ADC, configurable project/location/model, and local RAG embeddings; never require an OpenAI key.
+- Verify official Google model/SDK documentation before model selection. Use configurable Developer API with a local AI Studio key, or optional Vertex with ADC/project/location; keep local RAG and never require an OpenAI key. A documentation check is not live access verification.
 - Before each milestone reread the relevant spec: M1 §§8,20–24; M2 §§2,9–12,23; M3 §§15–19,23; M4 §§4,6,20; M5 §§5–8,24; M6 §§8–12; M7 §§12–14; M8 §§15–18; M9 entire spec and verification/handoff sections.
 - Finish and verify one milestone before starting the next. At each boundary report what works, actual tests, blocked/unverified items, user checks and the next milestone. Detailed evidence and the exact next action live in [STATUS.md](./STATUS.md).
 

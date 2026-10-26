@@ -12,6 +12,7 @@ def main() -> None:
     parser.add_argument("--data-dir", help="Override local SQLite/artifact root")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="Read-only, secret-free presence diagnostics")
+    commands.add_parser("verify-container", help="Zero-quota deterministic job through the real CAD container and FreeCAD")
     commands.add_parser("projects", help="List persisted projects; never launches a job")
     jobs = commands.add_parser("jobs", help="Inspect durable job records and owner IDs")
     jobs.add_argument("project_id")
@@ -39,6 +40,10 @@ def main() -> None:
             command.add_argument("--confirm", required=True, help="Hash of the exact region/setup review being confirmed")
     args = parser.parse_args()
     config = Config.from_env()
+    if args.command == "verify-container":
+        from examples.container_check import run
+        print(json.dumps(run(config), indent=2))
+        return
     if args.command == "doctor":
         print(diagnostics_json(config))
         return

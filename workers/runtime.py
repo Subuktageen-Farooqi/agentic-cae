@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import uuid
 
-from config import Config
+from config import Config, local_podman
 from schemas import ArtifactManifest, CADGeneration
 from workers.code_validation import validate_code
 
@@ -21,11 +21,16 @@ class CADBuildError(RuntimeError):
     pass
 
 
+def runtime_executable(config: Config) -> str:
+    return shutil.which(config.container_runtime) or (local_podman() if config.container_runtime == "podman" else None) or config.container_runtime
+
+
 def check_runtime(config: Config) -> None:
-    if not shutil.which(config.container_runtime):
+    executable = runtime_executable(config)
+    if not shutil.which(executable):
         raise SandboxUnavailable(f"{config.container_runtime} is unavailable; generated code was not executed")
     try:
-        daemon = subprocess.run([config.container_runtime, "info", "--format", "{{json .}}"],
+        daemon = subprocess.run([executable, "info", "--format", "{{json .}}"],
                                 capture_output=True, text=True, timeout=15)
         try:
             info = json.loads(daemon.stdout)
@@ -34,7 +39,7 @@ def check_runtime(config: Config) -> None:
         system = info.get("OSType") or info.get("host", {}).get("os")
         if daemon.returncode != 0 or system != "linux":
             raise SandboxUnavailable("A running Linux container engine is required for generated CAD")
-        image = subprocess.run([config.container_runtime, "image", "inspect", config.cad_image],
+        image = subprocess.run([executable, "image", "inspect", config.cad_image],
                                capture_output=True, text=True, timeout=15)
         if image.returncode != 0:
             raise SandboxUnavailable(f"CAD image is missing. Build it: {config.container_runtime} build -f workers/Dockerfile -t {config.cad_image} .")
@@ -48,7 +53,7 @@ def container_command(config: Config, directory: Path, name: str) -> list[str]:
         source = "\\\\" + source[8:]
     elif source.startswith("\\\\?\\"):
         source = source[4:]
-    return [config.container_runtime, "run", "--rm", "--name", name, "--network=none", "--read-only",
+    return [runtime_executable(config), "run", "--rm", "--name", name, "--network=none", "--read-only",
             "--user=65532:65532", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64",
             "--cpus=2", "--memory=2g", "--memory-swap=2g", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
             "--mount", f"type=bind,source={source},target=/job", config.cad_image]
@@ -73,7 +78,7 @@ def execute_generated(*, generation: CADGeneration, project_id: str, job_id: str
         process = subprocess.run(container_command(config, directory, name), capture_output=True, text=True,
                                  timeout=config.worker_timeout_seconds)
     except subprocess.TimeoutExpired as error:
-        subprocess.run([config.container_runtime, "rm", "-f", name], capture_output=True, timeout=15)
+        subprocess.run([runtime_executable(config), "rm", "-f", name], capture_output=True, timeout=15)
         (directory / "container.log").write_text("Container exceeded the configured time limit", encoding="utf-8")
         raise CADBuildError("Generated CAD exceeded the container time limit") from error
     (directory / "container.log").write_text(process.stdout + "\n" + process.stderr, encoding="utf-8")

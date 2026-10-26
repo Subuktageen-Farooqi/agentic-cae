@@ -4,6 +4,8 @@ Required product work is tracked in [PLAN.md](./PLAN.md) and [REQUIREMENTS_CHECK
 
 All future solver work uses FreeCAD FEM with Gmsh and CalculiX. The application's executable analysis scope remains linear static; other workbench/solver capabilities do not automatically make additional analysis types supported here.
 
+M8 analysis advising and input collection are implemented with offline provider doubles. Remaining required verification is the real generated-code container job and single five-request Developer API journey; neither is satisfied by mocked tests. See [LIVE_SMOKE.md](./LIVE_SMOKE.md) and [STATUS.md](./STATUS.md). WSL2 must first be enabled from an administrator session on this PC.
+
 ## Unrelated improvements
 
 None identified.

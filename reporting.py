@@ -80,9 +80,9 @@ def render_report(spec: AnalysisSpec, results: AnalysisResults) -> str:
         for label, key, value, unit in values:
             criterion = (f"≤ {limits[key]:g} {unit}: {'PASS' if value <= limits[key] else 'FAIL'}"
                          if key in limits else NO_CRITERION)
-            lines.append(f"| {label} | {value:g} {unit} | {criterion} |")
+            lines.append(f"| {label} | {value} {unit} | {criterion} |")
         reaction = results.reaction_force_n
-        lines.extend(["", f"- Reaction force: ({reaction[0]:g}, {reaction[1]:g}, {reaction[2]:g}) N",
+        lines.extend(["", f"- Reaction force: ({reaction[0]}, {reaction[1]}, {reaction[2]}) N",
                       f"- Mesh: {results.mesh.nodes} nodes, {results.mesh.elements} elements", ""])
         applied = tuple(sum(load.force_n[axis] for load in spec.loads) for axis in range(3))
         imbalance = tuple(applied[axis] + reaction[axis] for axis in range(3))

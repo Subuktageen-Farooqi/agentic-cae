@@ -2,19 +2,19 @@
 
 A local prototype for mechanical design: idea → optional RAG engineering advice → structured brief/spec → CadQuery → FreeCAD → checks and feedback → confirmed analysis → FreeCAD FEM → evidence-based report.
 
-**The real CAD → app review → FreeCAD FEM → CalculiX → displayed results/report path has run on this PC.** M7 adds actual STL preview/downloads, artifact-bound acceptance, bounded feedback revisions and all three preserved restart choices. The app now supports explicit reference-steel static-analysis input, actual face review, confirmation, background solving and result/report display. M6's live Gemini and actual generated-code container path remain blocked by credentials/runtime, so live assisted feedback regeneration is not claimed. See [STATUS.md](./STATUS.md), [PLAN.md](./PLAN.md), [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md), [PROJECT_SPEC.md](./PROJECT_SPEC.md) and the detailed [real integration report](./FEM_INTEGRATION_REPORT.md).
+**The real CAD → app review → FreeCAD FEM → CalculiX → displayed results/report path has run on this PC.** M7 adds actual STL preview/downloads, artifact-bound acceptance, bounded feedback revisions and all three preserved restart choices. M8 adds persisted AI analysis recommendations, missing-input conversation and validated proposals against the existing real face-review/confirmation/solve path, plus an optional AI explanation kept separate from numerical results. M6's live Gemini and actual generated-code container path remain blocked by credentials/runtime, so live assisted feedback regeneration is not claimed. See [STATUS.md](./STATUS.md), [PLAN.md](./PLAN.md), [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md), [PROJECT_SPEC.md](./PROJECT_SPEC.md) and the detailed [real integration report](./FEM_INTEGRATION_REPORT.md).
 
 ## Verified behavior and current limits
 
-The latest full verification on 2026-10-26 passed **163 tests with no skips**, including real CadQuery exports, FreeCAD import/save, a FreeCAD FEM/CalculiX solve, and Streamlit interaction tests. The reference 100 x 20 x 10 mm steel cantilever under a 100 N tip force displaced **0.0996479292 mm**, compared with the **0.1000000000 mm** beam estimate; extracted reactions balance the applied force. Saved result artifacts, hashes and the FEM document were also checked. These are integration-example results, not approval of a user design.
+The latest full verification on 2026-10-27 passed **195 tests with no skips**, including real CadQuery exports, FreeCAD import/save, a FreeCAD FEM/CalculiX solve, and Streamlit interaction tests. The reference 100 x 20 x 10 mm steel cantilever under a 100 N tip force displaced **0.0996479292 mm**, compared with the **0.1000000000 mm** beam estimate; extracted reactions balance the applied force. Saved result artifacts, hashes and the FEM document were also checked. These are integration-example results, not approval of a user design.
 
 | Area | Current boundary |
 | --- | --- |
 | Real FEM execution | Linear static, sourced reference steel, planar min/max-X face selectors; actual region review/confirmation through the app and CLI |
 | Engineering conclusions | Preliminary single-mesh results; nodal plots; no mesh convergence, fatigue, durability or certified material claim |
 | Assisted generation | Specification/source/job/repair behavior is locally tested with labeled doubles; live Gemini and the generated-code container have not run here |
-| External setup | Vertex project/location/model/ADC and a running Linux Docker/Podman engine with the CAD image are still required |
-| Remaining application work | M8 advisor-led analysis recommendations and broader material/selector/input coverage; live assisted revision/container verification and final M9 handoff |
+| External setup | AI Studio key/model (or optional Vertex/ADC); Podman 5.8.9 client is installed, but missing Windows WSL2 blocks the Linux engine/image |
+| Remaining verification | Zero-quota real container check, then the single five-request live assisted journey; broader material/selectors remain explicitly unsupported |
 
 ## Run the verified foundation (Windows PowerShell)
 
@@ -97,7 +97,7 @@ The fixed FreeCAD FEM template creates the mesh, writes/runs CalculiX, imports a
 
 ## Generated-design execution
 
-The automatic route starts M6 once when Vertex is configured. A durable background job freezes a brief, persists matching JSON/Markdown, generates `build(params)` source and executes only through Docker/Podman. The trusted worker owns imports and exports. One technical repair uses actual code/check failures; unavailable dependencies do not consume that repair budget or a user rejection. A blocked/failed job offers an explicit new-attempt retry. Reopening a session does not rerun existing pending/running/interrupted work.
+The automatic route starts M6 once when the selected Gemini provider is configured. A durable background job freezes a brief, persists matching JSON/Markdown, generates `build(params)` source and executes only through Docker/Podman. The trusted worker owns imports and exports. One technical repair uses actual code/check failures; unavailable dependencies do not consume that repair budget or a user rejection. A blocked/failed job offers an explicit new-attempt retry. Reopening a session does not rerun existing pending/running/interrupted work.
 
 M7 displays the real STL, parameters, assumptions, check coverage and downloads. Acceptance is bound to the current revision/hash and cannot pass altered artifacts or failed mandatory checks. The first user rejection records any supported feedback mode and queues one new candidate in the same attempt; the second preserves both revisions and offers retry-from-approved-brief, brainstorming-with-feedback, or original-idea restart. These create fresh attempt IDs/counters without replacing original intake or artifacts. Feedback-based brief/spec changes retain unaffected requirements; hard/soft requirement changes require the existing ID and an exact quote from explicit user feedback. The actual LLM/container regeneration remains unverified until external setup is available.
 
@@ -107,9 +107,15 @@ AST validation is defense in depth, not isolation. Build the image on a running 
 docker build -f workers/Dockerfile -t agentic-cae-cad:2.6.1 .
 ```
 
-The generated-code container has no network or credentials, a read-only root, a non-root user, dropped capabilities, CPU/memory/process/time limits and only its own input/output directory mounted. The Docker context allowlist excludes credentials and local artifacts. The image/container path is implemented but **has not run on this PC**, where Docker/Podman is absent.
+The generated-code container has no network or credentials, a read-only root, a non-root user, dropped capabilities, CPU/memory/process/time limits and only its own input/output directory mounted. The Docker context allowlist excludes credentials and local artifacts. The image/container path is implemented but **has not run on this PC**. Podman 5.8.9 is installed; Windows WSL2 is unavailable, so machine initialization and the deterministic container check are blocked. See [LIVE_SMOKE.md](./LIVE_SMOKE.md).
 
-## Vertex configuration
+## Gemini Developer API and optional Vertex configuration
+
+Copy [.env.example](./.env.example) to repository-root `.env` if it does not exist. Set `LLM_PROVIDER=gemini_developer`, enter `GEMINI_API_KEY` locally, and choose `GEMINI_MODEL_ID=gemini-3.5-flash-lite`. Do not paste the key into chat. The app loads `.env` server-side with python-dotenv; process variables win and interpolation is disabled. `.env` and `.env.*` are ignored; only the blank example is tracked.
+
+On 2026-10-27, official [model documentation](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) listed this stable model with image input and structured outputs, and [pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.5-flash-lite) listed free-tier input/output. Account access and quota remain unverified until the authorized live journey. Developer mode constructs `genai.Client(vertexai=False, api_key=...)`; it does not use Vertex/ADC. Both adapters disable SDK retries and sanitize SDK failures. No credential is passed to a model prompt, container, frontend, log or project record.
+
+To use optional Vertex, set `LLM_PROVIDER=vertex` and configure the following:
 
 For Vertex Gemini, enable the Vertex AI API, establish Application Default Credentials locally, and set the non-secret identifiers:
 
@@ -125,31 +131,31 @@ Do not copy ADC JSON into the repository. Authenticate independently or transfer
 ### State not stored in Git
 
 - `.venv/` and `.tools/`: the Python environment, portable uv executable/cache, and installed packages. Recreate them from `pyproject.toml` and `uv.lock`.
-- `.env`, `.streamlit/secrets.toml`, ADC JSON, private keys and certificate containers: intentionally ignored. No such credential file was present during the handoff scan.
+- `.env`, `.streamlit/secrets.toml`, ADC JSON, private keys and certificate containers: intentionally ignored. The ignored local `.env` was prepared with a blank key for the user to fill locally; its contents are never included in handoff evidence.
 - `data/workflow.sqlite3`: local workflow/session database. It is required only to resume this PC's existing sessions; a fresh checkout creates a new database.
 - `data/projects/`: original intake copies, uploaded images, briefs, STEP/STL/FCStd, parameters, manifests, metrics and logs. It is ignored because it can contain user data and generated binaries. Copy it separately only if exact sessions/artifacts must move.
-- System software: Git, Python 3.12, FreeCAD with FEM/Gmsh/CalculiX, and Google Cloud CLI for convenient ADC setup. Portable FreeCAD and the Python environment must be recreated on another PC; Docker/Podman is still absent here.
-- FEM software: FreeCAD FEM, Gmsh and CalculiX are required for real analysis. No commercial solver license is needed. An enabled Google Cloud project, Vertex permissions/credits, model configuration and ADC are required for live Gemini.
+- System software: Git, Python 3.12, FreeCAD with FEM/Gmsh/CalculiX, and Google Cloud CLI for convenient ADC setup. Portable FreeCAD, Podman and the Python environment must be recreated on another PC; WSL2 and a running Linux container engine must also be verified.
+- FEM software: FreeCAD FEM, Gmsh and CalculiX are required for real analysis. No commercial solver license is needed. Live Gemini uses a local AI Studio key/model, or optional Vertex project/permissions/location/model and ADC.
 
 The earlier PC's handoff recorded a 106,496-byte SQLite database and a 29,739-byte deterministic CAD demo; that local state was not part of the checkout. This PC has newly generated FEM demonstration state, also excluded from Git. GitHub receives source, tests, documentation, dependency manifests and the curated knowledge collection/index; environments, credentials, databases, CAD/FEA results and build outputs must be recreated or transferred separately. See [STATUS.md](./STATUS.md) for the verified milestone and next action.
 
 ## Configuration and dependency discovery
 
-[.env.example](./.env.example) documents process environment variables. The foundation reads the process environment; `.env` is not automatically loaded. `doctor` checks presence and package versions without reading credential contents, printing configured values, launching software or claiming authentication/license validity.
+[.env.example](./.env.example) documents local variables. Repository-root `.env` is loaded automatically without overriding existing process variables or expanding `${...}` references. `doctor` checks presence and package versions without reading credential contents, printing configured values, launching software or claiming authentication/license validity.
 
 - `CAE_DATA_DIR`: local SQLite and artifact root (default `data`). Use a local filesystem supporting hard links, such as NTFS. Atomic no-clobber publication uses a temporary file, flush/fsync and a hard link. An unsupported filesystem fails explicitly.
 - `FREECAD_CMD`: installed FreeCADCmd executable. Its own Python environment will import and save STEP through the FreeCAD API in M2.
 - `CALCULIX_CCX`, `GMSH_EXE`: optional executable overrides for CalculiX and Gmsh. Discovery checks beside FreeCADCmd and PATH. FreeCAD FEM performs actual region resolution, meshing and solving; no solver-client Python package is required.
 - `CAE_CONTAINER_RUNTIME`: `docker` or `podman`; `CAE_CAD_IMAGE`: the locally built CAD image. A running Linux engine is required; an ordinary subprocess is not a sandbox.
-- `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GEMINI_MODEL_ID`: Vertex Gemini configuration. ADC will authenticate; no OpenAI key is used. Do not paste credentials into chat or commit them. Official SDK/model documentation has been checked; project-specific access still requires a live request.
+- `LLM_PROVIDER`: `gemini_developer` or `vertex`; `GEMINI_API_KEY`: server-side Developer API key; `GEMINI_MODEL_ID`: configurable vision model. Optional Vertex uses `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` and ADC. Do not paste credentials into chat or commit them. Official SDK/model documentation has been checked; project-specific access still requires a live request.
 
-The provider uses `google-genai` with an explicit Vertex client, API `v1`, bounded HTTP timeout and byte-bearing `Part.from_bytes` image parts. Client initialization/authentication errors enter the same blocked fallback as request errors. See the [SDK documentation](https://googleapis.github.io/python-genai/). The configurable example is now `gemini-3.8-flash`, a documented [multimodal model](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash). Google's [lifecycle table](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) lists the previous `gemini-2.5-flash` example as retired on 2026-10-20. Documentation availability does not prove this project's access, permissions or successful model execution; a live ADC-authenticated call remains unverified.
+Both providers preserve byte-bearing image parts and JSON responses. Vertex uses API v1, configurable project/location/model and ADC; Developer API uses the explicitly supplied local key. See the [Google Gen AI SDK documentation](https://googleapis.github.io/python-genai/). Authentication and account-specific model availability remain unverified until an actual successful request.
 
 ## Knowledge index and advisor boundaries
 
 The four initial documents under `data/knowledge/sources/` are explicitly labeled authored seed notes. They contain general decision context without fabricated numerical limits. `knowledge-update` chunks them and atomically writes `data/knowledge/index.json`, using normalized local TF-IDF vectors plus BM25. This is a lexical hybrid rather than a neural semantic model. Every result retains source kind, local reference, section, date, topic and available material/process/equipment/supplier context.
 
-When Vertex is unavailable, the UI labels the response `local_retrieval_only` and displays extractive passages with chunk citations. It does not present that text as Gemini output. A live Vertex call is required before multimodal interpretation can be marked verified.
+When the selected Gemini provider is unavailable, the UI labels the response `local_retrieval_only` and displays extractive passages with chunk citations. It does not present that text as Gemini output. The single authorized live image request is required before multimodal interpretation can be marked verified.
 
 Pure tests run without FreeCAD. Integration tests execute installed CadQuery, FreeCAD and CalculiX; they explicitly skip when dependencies are absent. Provider/container doubles are labeled and never count as a live Gemini request or a sandboxed build.
 
@@ -175,4 +181,4 @@ Recovery marks that owner's running jobs `interrupted`; it never executes them. 
 
 Foundation tests use real local files and SQLite, including actual PNG bytes. Solver-result fixtures are explicitly labeled `test_fixture`; no solver is invoked. The contracts reject unavailable solvers carrying fabricated results and reject stale geometry/spec bindings.
 
-The real app and solver tests verify displacement against beam theory and extracted reactions against the applied force. Run `pytest -m real_integration` for those cases. M7 review/transaction tests use explicitly synthetic artifacts; M6 includes labeled provider/container doubles. Neither is evidence of a live model or sandbox execution. Live Gemini, actual container execution, broader M8 analysis advising and the final M9 assisted journey remain pending or blocked. The trusted reference CAD/FEM app journey is verified; the complete live-assisted product is not yet verified end to end.
+The real app and solver tests verify displacement against beam theory and extracted reactions against the applied force. Run `pytest -m real_integration` for those cases. M7 review/transaction tests use explicitly synthetic artifacts; M6 includes labeled provider/container doubles. Neither is evidence of a live model or sandbox execution. M8 advising is implemented and tested offline. Live Gemini, actual container execution and the final M9 assisted journey remain pending or blocked. The trusted reference CAD/FEM app journey is verified; the complete live-assisted product is not yet verified end to end.

@@ -434,6 +434,38 @@ class AnalysisSpec(Contract):
         return issues
 
 
+class AnalysisInputs(Contract):
+    """User supplied quantities; the model cannot silently invent these."""
+    engineering_question: str = ""
+    analysis_type: AnalysisType | None = None
+    material_id: Literal["freecad-generic-steel"] | None = None
+    force_n: tuple[float, float, float] | None = None
+    support_kind: Literal["planar_min_x"] | None = None
+    load_kind: Literal["planar_max_x"] | None = None
+    mesh_mm: Positive | None = None
+    acceptance_limits: list[AcceptanceLimit] = Field(default_factory=list)
+
+    def missing(self) -> list[str]:
+        missing = [name for name in ("engineering_question", "analysis_type", "material_id",
+                   "force_n", "support_kind", "load_kind", "mesh_mm") if not getattr(self, name)]
+        if self.force_n is not None and not any(self.force_n):
+            missing.append("nonzero force_n")
+        return missing
+
+
+class AnalysisPlan(Contract):
+    plan_id: str = Field(default_factory=new_id)
+    accepted_revision_id: Nonempty
+    geometry_hash: Digest
+    inputs: AnalysisInputs
+    user_message: Nonempty
+    text: Nonempty
+    recommendations: list[AnalysisRecommendation] = Field(min_length=1)
+    questions: list[str] = Field(default_factory=list, max_length=2)
+    missing_inputs: list[str] = Field(default_factory=list)
+    specification: AnalysisSpec | None = None
+
+
 class MeshInformation(Contract):
     nodes: Annotated[int, Field(gt=0)]
     elements: Annotated[int, Field(gt=0)]
@@ -529,6 +561,15 @@ class ArtifactManifest(Contract):
         if self.completed and not self.artifacts:
             raise ValueError("Completion requires actual artifacts")
         return self
+
+
+class ReportExplanation(Contract):
+    explanation_id: str = Field(default_factory=new_id)
+    analysis_id: Nonempty
+    run_id: Nonempty
+    accepted_revision_id: Nonempty
+    geometry_hash: Digest
+    text: Nonempty
 
 
 class ChatMessage(Contract):

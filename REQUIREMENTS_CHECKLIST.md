@@ -14,11 +14,11 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), updated for the user-approved F
 | DEP-06 | Installed/version-compatible FreeCAD FEM FreeCAD FEM | `config.py`, `workers/fem_worker.py` | Version probe, launch/connect, actual import and solve | verified |
 | DEP-07 | Installed CalculiX ccx; no commercial license | `config.py`, `workers/fem_worker.py` | Actual ccx version and completed static solve | verified |
 | DEP-08 | Installed Gmsh and compatible FreeCAD FEM API | `config.py`, `workers/fem_worker.py` | Actual tetrahedral mesh and fixed API template | verified |
-| DEP-09 | Vertex project, location, vision Gemini model ID and ADC permissions | `.env.example`, `config.py`, `providers/vertex.py` | Current official SDK/model docs; ADC live vision/text request; never print secrets | blocked |
+| DEP-09 | Developer API key/vision model, or optional Vertex project/location/model/ADC | `.env.example`, `config.py`, `providers/factory.py` | Official model/SDK docs; single opt-in live vision journey; never print secrets | blocked |
 | DEP-10 | Local embedding package/model cache | `rag/ingest.py`, `rag/retriever.py` | Local index build and semantic query; honest lexical fallback | implemented |
 | DEP-11 | Writable local SQLite/artifact storage | `storage.py`, `config.py` | Atomic/recovery/concurrent persistence tests | verified |
 
-Current PC: Python 3.12.13 and all four locked extras are installed; portable FreeCAD 1.1.4, Gmsh 4.15.0 and CalculiX 2.22 have completed a real deterministic solve. Docker/Podman and Vertex project/location/model/ADC remain unavailable. Historical evidence and remaining limitations are in STATUS.md. Never request credentials in chat or log their values.
+Current PC: Python 3.12.13 and all five locked extras are installed; portable FreeCAD 1.1.4, Gmsh 4.15.0 and CalculiX 2.22 have completed real reference integrations. Developer API and optional Vertex adapters plus M8 are implemented and tested offline. Podman 5.8.9 is installed, but missing WSL2 blocks machine/image execution. Live API and actual container execution remain unverified; see LIVE_SMOKE.md. Historical evidence and remaining limitations are in STATUS.md. Never request credentials in chat or log their values.
 
 ## Product, scope and architecture (§§1–3)
 
@@ -135,13 +135,13 @@ Current PC: Python 3.12.13 and all four locked extras are installed; portable Fr
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
 | 15-01 | Ask exact learning-goal question after acceptance; use purpose/requirements/material/geometry/conditions | `app.py`, `agents/analysis_planner.py` | Accepted-design analysis intake test | implemented |
-| 15-02 | Recommendations name/question/relevance/inputs/supported flag | `schemas.py:AnalysisRecommendation`, `agents/analysis_planner.py` | Complete validated recommendations | pending |
+| 15-02 | Recommendations name/question/relevance/inputs/supported flag | `schemas.py:AnalysisRecommendation`, `agents/analysis_planner.py` | Offline validated recommendation and app tests; live verification pending | implemented |
 | 15-03 | Execute linear static only; identify modal/random vibration/fatigue/transient/other as unsupported | `schemas.py`, `agents/analysis_planner.py` | Unsupported analysis requests never reach solver | implemented |
-| 15-04 | No invented spectra/S-N curves/damping/histories/mounts; static does not prove fatigue/vibration life | `agents/analysis_planner.py`, `reporting.py` | Missing-input and scope-limitation tests | pending |
+| 15-04 | No invented spectra/S-N curves/damping/histories/mounts; static does not prove fatigue/vibration life | `agents/analysis_planner.py`, `reporting.py` | Explicit input/spec equality, missing-input and unsupported-type tests; live prose pending | implemented |
 | 16-01 | analysis_spec.json and deterministic Markdown | `reporting.py`, `examples/fem_demo.py` | Same validated source produces both | verified |
 | 16-02 | Schema/spec version, accepted revision/hash, type/question, material ID/source and explicit units | `schemas.py:AnalysisSpec` | Required-field, unit and binding validation | verified |
 | 16-03 | Supports/loads/selectors/mesh/outputs/acceptance/assumptions/missing/supported status | `schemas.py:AnalysisSpec` | Complete/incomplete/unsupported contract cases | verified |
-| 16-04 | Sufficient material/load/support before execution; verified small material allowlist; no brief contradiction | `analysis/materials.py`, `workflow.py` | Material-source and missing-input gate tests | implemented |
+| 16-04 | Sufficient material/load/support before execution; verified small material allowlist; no brief contradiction | `analysis/materials.py`, `agents/analysis_planner.py`, `fem_workflow.py` | Material-source and missing-input gate tests | implemented |
 | 16-05 | Proposed setup and actual selected regions shown; explicit input confirmation; automatic CAD route never authorizes analysis defaults | `app.py`, `workflow.py` | Confirm-before-solve and invalidation tests | verified |
 
 ## Selectors and FreeCAD FEM (§§17–18)
@@ -165,11 +165,11 @@ Current PC: Python 3.12.13 and all four locked extras are installed; portable Fr
 
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
-| 19-01 | results.json/report.md/images/downloads; deterministic numeric tables; LLM explains supplied facts only | `reporting.py`, `agents/report_writer.py`, `app.py` | Extracted-value equality and downloadable artifact hashes | implemented |
+| 19-01 | results.json/report.md/images/downloads; deterministic numeric tables; LLM explains supplied facts only | `reporting.py`, `agents/report_explainer.py`, `app.py` | Extracted-value equality and downloadable artifact hashes | implemented |
 | 19-02 | Revision/hash, question, material/source, loads/supports/units, mesh/counts, status, displacement/stress | `reporting.py` | Complete report fixture and real extracted values | implemented |
 | 19-03 | Reaction balance, plots, supplied acceptance comparisons, missing checks, assumptions/limitations | `reporting.py` | Force equilibrium and threshold comparison tests | implemented |
 | 19-04 | Exact absent-criterion phrase; failed/incomplete solve yields failure report | `reporting.py` | Success without criteria and failed/incomplete cases | verified |
-| 19-05 | Label preliminary single-mesh; no unverified convergence/peak-stress claims; constraint singularity limits | `reporting.py`, `agents/report_writer.py` | Report limitation assertions and manual review | verified |
+| 19-05 | Label preliminary single-mesh; no unverified convergence/peak-stress claims; constraint singularity limits | `reporting.py`, `agents/report_explainer.py` | Report limitation assertions and manual review | verified |
 
 ## Durable state and organization (§§20–21)
 
