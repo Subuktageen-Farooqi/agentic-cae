@@ -8,8 +8,8 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), updated for the user-approved F
 | --- | --- | --- | --- | --- |
 | DEP-01 | Supported Python and Pydantic, SQLite, pytest | `pyproject.toml`, `.venv/`, `config.py` | Project-local interpreter, installed versions, complete M1 tests | verified |
 | DEP-02 | Streamlit, trimesh and Plotly | `pyproject.toml`, `app.py` | Start app and interact with actual STL | implemented |
-| DEP-03 | CadQuery in isolated execution environment | `workers/cad_worker.py`, `workers/Dockerfile` | Real STEP/STL with valid manifest and measured solid | blocked |
-| DEP-04 | Docker or equivalent no-network/resource-limited runtime | `config.py`, `workers/runtime.py` | Probe daemon; enforce mounts, limits, user and no-network | blocked |
+| DEP-03 | CadQuery in isolated execution environment | `workers/cad_worker.py`, `workers/Dockerfile` | Real STEP/STL with valid manifest and measured solid | verified |
+| DEP-04 | Docker or equivalent no-network/resource-limited runtime | `config.py`, `workers/runtime.py` | Probe daemon; enforce mounts, limits, user and no-network | verified |
 | DEP-05 | Installed FreeCADCmd supplied Python/API, explicit executable path | `config.py`, `workers/freecad_worker.py` | Actual STEP import, metrics, FCStd and completion manifest | verified |
 | DEP-06 | Installed/version-compatible FreeCAD FEM FreeCAD FEM | `config.py`, `workers/fem_worker.py` | Version probe, launch/connect, actual import and solve | verified |
 | DEP-07 | Installed CalculiX ccx; no commercial license | `config.py`, `workers/fem_worker.py` | Actual ccx version and completed static solve | verified |
@@ -18,7 +18,7 @@ Authority: [PROJECT_SPEC.md](./PROJECT_SPEC.md), updated for the user-approved F
 | DEP-10 | Local embedding package/model cache | `rag/ingest.py`, `rag/retriever.py` | Local index build and semantic query; honest lexical fallback | implemented |
 | DEP-11 | Writable local SQLite/artifact storage | `storage.py`, `config.py` | Atomic/recovery/concurrent persistence tests | verified |
 
-Current PC: Python 3.12.13 and all five locked extras are installed; portable FreeCAD 1.1.4, Gmsh 4.15.0 and CalculiX 2.22 have completed real reference integrations. Developer API and optional Vertex adapters plus M8 are implemented and tested offline. Podman 5.8.9 is installed, but missing WSL2 blocks machine/image execution. Live API and actual container execution remain unverified; see LIVE_SMOKE.md. Historical evidence and remaining limitations are in STATUS.md. Never request credentials in chat or log their values.
+Current PC: Python 3.12.13 and all five locked extras are installed; portable FreeCAD 1.1.4, Gmsh 4.15.0 and CalculiX 2.22 have completed real reference integrations. Developer API and optional Vertex adapters plus M8 are implemented and tested offline. WSL 3.0.3 / Podman 5.8.9 and a real restricted deterministic CadQuery/FreeCAD container job are verified. One actual Gemini Developer API request returned but the advisor reply failed validation, stopping the original live ledger at 1/5. Full assisted CAD/FEM remains unverified; see LIVE_SMOKE.md. Historical evidence and remaining limitations are in STATUS.md. Never request credentials in chat or log their values.
 
 ## Product, scope and architecture (§§1–3)
 
@@ -66,7 +66,7 @@ Current PC: Python 3.12.13 and all five locked extras are installed; portable Fr
 | ID | Requirement | Implementation location | Verification method | Status |
 | --- | --- | --- | --- | --- |
 | 06-01 | Multiple image uploads in intake, advisor messages and CAD feedback | `app.py`, `schemas.py`, `storage.py` | All three upload flows retain bytes and references | implemented |
-| 06-02 | Actually send relevant image content to vision model; filenames insufficient | `providers/vertex.py`, `agents/` | Live actual-image call; inspect byte-bearing provider payload tests | blocked |
+| 06-02 | Actually send relevant image content to vision model; filenames insufficient | `providers/vertex.py`, `agents/` | Live actual-image call; inspect byte-bearing provider payload tests | implemented |
 | 06-03 | Persist bytes/metadata through reruns/restarts; default images mean desired/reference object | `schemas.py:ImageReference`, `storage.py` | Restart integrity/hash tests and semantic defaults | verified |
 | 06-04 | No precise dimensions/properties/capacity from unscaled photos; separate observations/inferences/confirmed facts | `schemas.py`, `agents/` | Image interpretation contract and prompt/output tests | implemented |
 | 06-05 | Label generated-model screenshots separately | `schemas.py:ImageReference`, `providers/vertex.py` | Role-specific image labels tested | verified |
@@ -95,7 +95,7 @@ Current PC: Python 3.12.13 and all five locked extras are installed; portable Fr
 | --- | --- | --- | --- | --- |
 | 09-01 | CAD role receives spec, reference image content, accepted decisions, prior code/feedback or technical errors | `agents/cad_creator.py`, `agents/revision_writer.py` | Captured input tests and live generation when available | implemented |
 | 09-02 | Restricted build(params) function; trusted worker owns imports/params/invocation/export/error/log/manifest | `workers/cad_worker.py`, `workers/runtime.py` | Allowed/disallowed source tests and actual worker execution | implemented |
-| 09-03 | Generated code cannot control infrastructure, secrets, files, shell or network; real isolation with no-network/no-secrets/non-root/minimal mounts/CPU-memory-time limits | `workers/Dockerfile`, `workers/runtime.py` | Container configuration inspection and adversarial execution tests | blocked |
+| 09-03 | Generated code cannot control infrastructure, secrets, files, shell or network; real isolation with no-network/no-secrets/non-root/minimal mounts/CPU-memory-time limits | `workers/Dockerfile`, `workers/runtime.py` | Container configuration inspection and adversarial execution tests | implemented |
 | 09-04 | Never call subprocess or blacklist a security sandbox | `workers/runtime.py`, `README.md` | Documentation and execution-path review | verified |
 | 09-05 | CadQuery produces model.step, preview.stl, model.py, parameters.json, metadata and logs | `workers/cad_worker.py`, `schemas.py:ArtifactManifest` | Real exports and content/hash/completion checks | verified |
 | 10-01 | FreeCADCmd API imports STEP, creates document, validates shape, saves actual model.FCStd | `workers/freecad_worker.py` | Real import/save/reopen with installed FreeCAD | verified |
@@ -192,7 +192,7 @@ Current PC: Python 3.12.13 and all five locked extras are installed; portable Fr
 | 22-02 | Follow implementation order; deterministic slice before assistance; continue independent work when blocked | `PLAN.md`, `STATUS.md` | Milestone evidence and blocker records | pending |
 | 23-01 | Actual source ingestion/relevant retrieval/cited recommendation/accepted choice/insufficient evidence | `tests/test_rag.py`, `examples/` | Execute all five RAG demonstrations | verified |
 | 23-02 | Actual image through vision and preserved through restart | `tests/`, `examples/` | Live Gemini image response plus persisted-byte hash | blocked |
-| 23-03 | Actual model/export/FreeCAD/preview; failed build; repair budget; scaffold NOT_IMPLEMENTED | `tests/`, `examples/cantilever.py` | Execute deterministic CAD demo and negative cases | blocked |
+| 23-03 | Actual model/export/FreeCAD/preview; failed build; repair budget; scaffold NOT_IMPLEMENTED | `tests/`, `examples/cantilever.py` | Execute deterministic CAD demo and negative cases | implemented |
 | 23-04 | First revision, second failure, three restarts, artifact-bound acceptance | `tests/test_review.py`, `tests/test_app_fem_e2e.py` | Complete feedback/restart integration cases | implemented |
 | 23-05 | Accepted geometry import/actual face display; missing/ambiguous rejection; real solve/report equality/stale result rejection | `tests/`, `examples/cantilever.py` | Real FreeCAD FEM demo and failure tests | verified |
 | 23-06 | Reload session after application restart; no duplicate frontend jobs | `tests/test_storage.py`, `tests/test_app.py` | SQLite restart and Streamlit rerun tests | verified |
@@ -200,7 +200,7 @@ Current PC: Python 3.12.13 and all five locked extras are installed; portable Fr
 | 24-01 | Source/dependency setup/tested versions/config without secrets/exact startup | `README.md`, `pyproject.toml`, `.env.example` | Clean-environment documented commands and version evidence | implemented |
 | 24-02 | KB update command, FreeCAD/FreeCAD FEM paths, deterministic and assisted demos | `README.md`, `examples/`, `config.py` | Run each documented command, record actual outcomes | implemented |
 | 24-03 | Truthful verified/unverified/blocked/planned distinctions, known limitations and actual evidence; no complete-product claim with blocked solver | `STATUS.md`, `REQUIREMENTS_CHECKLIST.md`, `README.md`, `app.py` | Audit claims against recorded executions | pending |
-| 24-04 | Google Vertex vision Gemini for advisor/spec/CAD/revision/analysis/report; ADC/configurable project/location/model; current SDK/model availability verified; replaceable provider | `providers/vertex.py`, `config.py`, `agents/`, `.env.example` | Official docs/SDK check before implementation; live configured-role calls | blocked |
+| 24-04 | Gemini Developer API for advisor/spec/CAD/revision/analysis/report with ignored local key and configurable model; optional Vertex/ADC; replaceable provider | `providers/gemini_developer.py`, `providers/vertex.py`, `config.py`, `agents/`, `.env.example` | Official docs/SDK check before implementation; live configured-role calls | blocked |
 | 24-05 | Local embeddings initially, no OpenAI dependency/key; proceed reasonably and ask only unresolved external/consequential blockers | `rag/`, `pyproject.toml`, `PLAN.md` | Dependency/config review and local index execution | verified |
 | PROC-01 | Create these four records before implementation; ordered testable milestones with behavior/verification/manual check | `PLAN.md`, `STATUS.md`, `BACKLOG.md`, `REQUIREMENTS_CHECKLIST.md` | Inspect records created before application source | verified |
 | PROC-02 | Update records at each boundary, five-point report, exact resume step; reread relevant spec on new milestone/compaction | `STATUS.md`, `PLAN.md` | Boundary evidence and resumption instructions | implemented |
@@ -208,4 +208,4 @@ Current PC: Python 3.12.13 and all five locked extras are installed; portable Fr
 
 ## Current verification boundary
 
-The real deterministic FEM path is verified. App and CLI actual-region review/confirmation work for the limited reference-steel linear-static setup. Broader M8 advisor-led intake/recommendations remain pending. Exported images currently show actual nodal displacement/stress fields; smooth contour/postprocessing controls remain unverified. M6 specification/source/repair/job behavior is tested with labeled provider/container doubles; actual Vertex and generated-code container execution remain blocked. M7 feedback/restart transactions and UI are tested with labeled fixtures; live Gemini/container regeneration and the full assisted journey remain pending. Real no-solver-mock app integration is in tests/test_app_fem_e2e.py and FEM_INTEGRATION_REPORT.md.
+The real deterministic FEM path is verified. App and CLI actual-region review/confirmation work for the limited reference-steel linear-static setup. M8 advisor-led intake/recommendations are implemented and tested offline; the first real advisor response failed validation. Exported images currently show actual nodal displacement/stress fields; smooth contour/postprocessing controls remain unverified. M6 specification/source/repair/job behavior is tested with labeled provider/container doubles; actual deterministic restricted-container execution is verified, while Gemini-generated CAD and the full assisted journey remain unverified. M7 feedback/restart transactions and UI are tested with labeled fixtures; live Gemini/container regeneration and the full assisted journey remain pending. Real no-solver-mock app integration is in tests/test_app_fem_e2e.py and FEM_INTEGRATION_REPORT.md.

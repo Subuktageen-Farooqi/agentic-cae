@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from contextlib import suppress
 from typing import Protocol, Sequence
+from pydantic import BaseModel
 
 from config import Config
 
@@ -28,7 +29,8 @@ class ImagePayload:
 
 class VisionTextProvider(Protocol):
     def generate(self, *, system_instruction: str, prompt: str,
-                 images: Sequence[ImagePayload] = ()) -> str: ...
+                 images: Sequence[ImagePayload] = (),
+                 response_schema: type[BaseModel] | None = None) -> str: ...
 
 
 class VertexGeminiProvider:
@@ -67,7 +69,8 @@ class VertexGeminiProvider:
         return parts
 
     def generate(self, *, system_instruction: str, prompt: str,
-                 images: Sequence[ImagePayload] = ()) -> str:
+                 images: Sequence[ImagePayload] = (),
+                 response_schema: type[BaseModel] | None = None) -> str:
         issues = self.availability_issues()
         if issues:
             raise ProviderUnavailable("; ".join(issues))
@@ -85,7 +88,7 @@ class VertexGeminiProvider:
                 contents=self._contents(prompt, images),
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction, temperature=0.2,
-                    response_mime_type="application/json"),
+                    response_mime_type="application/json", response_schema=response_schema),
             )
         except Exception:
             # SDK exceptions may include request URLs/headers, credentials or input.

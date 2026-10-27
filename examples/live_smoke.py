@@ -106,6 +106,62 @@ def preflight(config, evidence_path):
     return provider
 
 
+def continue_journey(*, config, store, project_id, provider, ledger, prior_requests=0, ledger_name="requests.sqlite3"):
+    """Resume the saved advisor-stage project without replaying its intake."""
+    pid=project_id
+    if store.project(pid)["state"] != S.ADVISOR_CHAT:
+        raise RuntimeError("The saved project is not awaiting the advisor")
+    brief=store.brief(pid)
+    history=store.records(pid,"ChatMessage")
+    if len(history)!=1 or history[0].role!="user" or history[0].brief_version!=brief.version:
+        raise RuntimeError("Expected exactly one preserved advisor question before continuation")
+    user=history[0]; message=user.text
+    flow=Workflow(store)
+    def transition(target):
+        return flow.transition(pid,target,expected_version=store.project(pid)["row_version"],reason="Authorized single live smoke journey")
+    reply=advise(provider=provider,retriever=LocalHybridRetriever(ROOT/"data/knowledge/index.json"),
+        brief=brief,history=[user],message=message,images=brief_images(store,pid,brief))
+    if not reply.sources or not reply.visual_observations:
+        raise AssertionError("Live advisor must cite retrieved evidence and interpret the actual sketch")
+    if any(o.image_id not in brief.reference_image_ids for o in reply.visual_observations):
+        raise AssertionError("Advisor referenced an unknown image")
+    updated=apply_reply_to_brief(brief,reply)
+    if updated.dimensions != brief.dimensions or updated.materials != brief.materials:
+        raise AssertionError("Advisor changed fixed live-test inputs")
+    if not updated.loads:
+        raise AssertionError("Advisor did not update the brief's loading")
+    brief=store.save_brief(pid,updated,expected_version=brief.version,actor="advisor",reason="Live image and retrieved-source advisor response")
+    assistant=ChatMessage(role="assistant",text=reply.text,sources=reply.sources,brief_version=brief.version)
+    store.save_record(pid,assistant.message_id,1,assistant)
+    transition(S.BRIEF_READY); transition(S.SPEC_GENERATION)
+    job=enqueue_generation(store,pid)
+    checked_job(run_generation_job(store=store,job_id=job.job_id,provider=provider,config=config,allow_technical_repair=False))
+    review=current_review(store,pid); artifacts=review_artifacts(store,pid,review)
+    assert_rectangular_metrics(artifacts["metrics"])
+    app=display_project(store,pid,"Review your design")
+    if len(app.get("plotly_chart")) < 1: raise AssertionError("Actual generated STL was not displayed")
+    accept_design(store,pid,expected_version=store.project(pid)["row_version"],revision_id=review.revision_id,geometry_hash=review.geometry_hash)
+    inputs=AnalysisInputs(engineering_question="What are displacement, stress and reaction balance under the 100 N negative-Z tip force?",
+        analysis_type="linear_static_structural",material_id="freecad-generic-steel",force_n=(0,0,-100),
+        support_kind="planar_min_x",load_kind="planar_max_x",mesh_mm=3)
+    plan=plan_analysis(store=store,project_id=pid,inputs=inputs,message="Prepare the specified preliminary steel cantilever linear-static analysis.",
+                       provider=provider,expected_version=store.project(pid)["row_version"])
+    if plan.specification is None: raise AssertionError("Complete user inputs did not yield an analysis specification")
+    spec=plan.specification
+    job=enqueue_prepare(store,pid,spec,expected_version=store.project(pid)["row_version"])
+    checked_job(run_fem_job(store=store,job_id=job.job_id,config=config))
+    preparation=store.record(pid,"FEMPreparation",spec.analysis_id,spec.version)
+    app=display_project(store,pid,"Review the actual analysis setup")
+    if len(app.get("plotly_chart")) < 1: raise AssertionError("Actual selected regions were not displayed")
+    state={"project_id":pid,"analysis_id":spec.analysis_id,"spec_version":spec.version,"data_dir":str(store.root),
+        "confirmation_hash":preparation.confirmation_hash,"regions":[r.model_dump(mode="json") for r in preparation.regions],
+        "specification":spec.model_dump(mode="json"),"directory":preparation.directory,"budget":ledger.snapshot(),
+        "ledger":ledger_name,"prior_live_requests":prior_requests,"cumulative_live_requests":prior_requests+ledger.snapshot()["count"]}
+    if state["budget"]["count"] != 4: raise AssertionError("Unexpected live request allocation")
+    write_once(CONTROL/"prepared.json",state)
+    return state
+
+
 def prepare(config, evidence_path):
     if (CONTROL/"prepared.json").exists() or (CONTROL/"requests.sqlite3").exists():
         raise RuntimeError("This smoke run already exists; preserve it and inspect status, never restart automatically")
@@ -133,46 +189,37 @@ def prepare(config, evidence_path):
             "and rectangular geometry. No additional conversation is requested; this is a preliminary static reference demonstration.")
         user=ChatMessage(role="user",text=message,image_ids=brief.reference_image_ids,brief_version=brief.version)
         store.save_record(pid,user.message_id,1,user)
-        reply=advise(provider=provider,retriever=LocalHybridRetriever(ROOT/"data/knowledge/index.json"),
-            brief=brief,history=[user],message=message,images=brief_images(store,pid,brief))
-        if not reply.sources or not reply.visual_observations:
-            raise AssertionError("Live advisor must cite retrieved evidence and interpret the actual sketch")
-        if any(o.image_id not in brief.reference_image_ids for o in reply.visual_observations):
-            raise AssertionError("Advisor referenced an unknown image")
-        updated=apply_reply_to_brief(brief,reply)
-        if updated.dimensions != brief.dimensions or updated.materials != brief.materials:
-            raise AssertionError("Advisor changed fixed live-test inputs")
-        if not updated.loads:
-            raise AssertionError("Advisor did not update the brief's loading")
-        brief=store.save_brief(pid,updated,expected_version=brief.version,actor="advisor",reason="Live image and retrieved-source advisor response")
-        assistant=ChatMessage(role="assistant",text=reply.text,sources=reply.sources,brief_version=brief.version)
-        store.save_record(pid,assistant.message_id,1,assistant)
-        transition(S.BRIEF_READY); transition(S.SPEC_GENERATION)
-        job=enqueue_generation(store,pid)
-        checked_job(run_generation_job(store=store,job_id=job.job_id,provider=provider,config=config,allow_technical_repair=False))
-        review=current_review(store,pid); artifacts=review_artifacts(store,pid,review)
-        assert_rectangular_metrics(artifacts["metrics"])
-        app=display_project(store,pid,"Review your design")
-        if len(app.get("plotly_chart")) < 1: raise AssertionError("Actual generated STL was not displayed")
-        accept_design(store,pid,expected_version=store.project(pid)["row_version"],revision_id=review.revision_id,geometry_hash=review.geometry_hash)
-        inputs=AnalysisInputs(engineering_question="What are displacement, stress and reaction balance under the 100 N negative-Z tip force?",
-            analysis_type="linear_static_structural",material_id="freecad-generic-steel",force_n=(0,0,-100),
-            support_kind="planar_min_x",load_kind="planar_max_x",mesh_mm=3)
-        plan=plan_analysis(store=store,project_id=pid,inputs=inputs,message="Prepare the specified preliminary steel cantilever linear-static analysis.",
-                           provider=provider,expected_version=store.project(pid)["row_version"])
-        if plan.specification is None: raise AssertionError("Complete user inputs did not yield an analysis specification")
-        spec=plan.specification
-        job=enqueue_prepare(store,pid,spec,expected_version=store.project(pid)["row_version"])
-        checked_job(run_fem_job(store=store,job_id=job.job_id,config=config))
-        preparation=store.record(pid,"FEMPreparation",spec.analysis_id,spec.version)
-        app=display_project(store,pid,"Review the actual analysis setup")
-        if len(app.get("plotly_chart")) < 1: raise AssertionError("Actual selected regions were not displayed")
-        state={"project_id":pid,"analysis_id":spec.analysis_id,"spec_version":spec.version,"data_dir":str(store.root),
-            "confirmation_hash":preparation.confirmation_hash,"regions":[r.model_dump(mode="json") for r in preparation.regions],
-            "specification":spec.model_dump(mode="json"),"directory":preparation.directory,"budget":ledger.snapshot()}
-        if state["budget"]["count"] != 4: raise AssertionError("Unexpected live request allocation")
-        write_once(CONTROL/"prepared.json",state)
-        return state
+        return continue_journey(config=config,store=store,project_id=pid,provider=provider,ledger=ledger)
+    except BaseException:
+        ledger.stop()
+        raise
+
+
+def recover(config, evidence_path):
+    """Explicit one-time continuation of the preserved first-attempt project.
+
+    This function is callable only after the user grants a new four-request
+    allowance. The original stopped ledger is never cleared or rewritten.
+    """
+    original=LiveBudget(CONTROL/"requests.sqlite3").snapshot()
+    if (original["count"] != 1 or not original["stopped"]
+            or original["requests"][0]["role"] != "advisor"
+            or original["requests"][0]["status"] != "returned"):
+        raise RuntimeError("The preserved first attempt is not eligible for this one-time continuation")
+    if (CONTROL/"recovery-requests.sqlite3").exists() or (CONTROL/"prepared.json").exists():
+        raise RuntimeError("Recovery already exists; never reset or replay its allowance")
+    checkpoint=json.loads((CONTROL/"project.json").read_text(encoding="utf-8"))
+    store=Store(checkpoint["data_dir"])
+    pid=checkpoint["project_id"]
+    if store.project(pid)["state"] != S.ADVISOR_CHAT or store.records(pid,"DesignSpec"):
+        raise RuntimeError("Saved advisor-stage project has changed; inspect before continuing")
+    for image in store.images(pid):
+        store.read_image(pid,image.image_id)
+    provider=preflight(config,evidence_path)
+    ledger=LiveBudget.create(CONTROL/"recovery-requests.sqlite3",max_requests=4)
+    try:
+        return continue_journey(config=config,store=store,project_id=pid,provider=ledger.wrap(provider),
+            ledger=ledger,prior_requests=original["count"],ledger_name="recovery-requests.sqlite3")
     except BaseException:
         ledger.stop()
         raise
@@ -180,11 +227,14 @@ def prepare(config, evidence_path):
 
 def solve(config, confirmation):
     state=json.loads((CONTROL/"prepared.json").read_text(encoding="utf-8"))
-    ledger=LiveBudget(CONTROL/"requests.sqlite3")
+    ledger=LiveBudget(CONTROL/state.get("ledger","requests.sqlite3"))
+    prior_requests=state.get("prior_live_requests",0)
     if confirmation != state["confirmation_hash"]:
         raise ValueError("Explicit confirmation of the displayed actual setup is required")
     if (CONTROL/"solved.json").exists() or ledger.snapshot()["stopped"]:
         raise RuntimeError("Run already finished or stopped; do not replay")
+    if prior_requests+ledger.snapshot()["count"] > 5:
+        raise RuntimeError("Combined live request budget was exceeded; do not solve")
     store=Store(state["data_dir"]); pid=state["project_id"]
     try:
         spec=store.record(pid,"AnalysisSpec",state["analysis_id"],state["spec_version"])
@@ -205,7 +255,7 @@ def solve(config, confirmation):
         if not checks["beam_applicable"] or checks["displacement_relative_difference"] >= .12 or checks["reaction_relative_residual"] >= 1e-4:
             raise AssertionError("Beam theory or reaction balance is outside existing integration tolerances")
         explanation_exercised=False
-        if ledger.snapshot()["count"] == 4:
+        if prior_requests+ledger.snapshot()["count"] == 4:
             explain_report(store=store,project_id=pid,spec=spec,result=result,provider=ledger.wrap(make_provider(config)))
             explanation_exercised=True
         count=ledger.snapshot()["count"]
@@ -218,6 +268,7 @@ def solve(config, confirmation):
         if ledger.snapshot()["count"] != count: raise AssertionError("Reopening consumed a live request")
         evidence={"project_id":pid,"analysis_id":spec.analysis_id,"checks":checks,"app_metrics":metrics,
             "result":result.model_dump(mode="json"),"budget":ledger.snapshot(),"explanation_exercised":explanation_exercised,
+            "prior_live_requests":prior_requests,"cumulative_live_requests":prior_requests+ledger.snapshot()["count"],
             "directory":str(directory),"mocked_components":[],"reopened_without_execution":True}
         write_once(CONTROL/"solved.json",evidence)
         ledger.stop()
@@ -229,19 +280,24 @@ def solve(config, confirmation):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase",choices=["prepare","solve","status"])
+    parser.add_argument("phase",choices=["prepare","recover","solve","status"])
     parser.add_argument("--live",action="store_true",help="Explicit opt-in to the single five-request live budget")
     parser.add_argument("--container-evidence")
     parser.add_argument("--confirm")
     args=parser.parse_args()
     if args.phase == "status":
-        value=LiveBudget(CONTROL/"requests.sqlite3").snapshot() if (CONTROL/"requests.sqlite3").exists() else {"count":0,"maximum":5,"started":False}
+        initial=LiveBudget(CONTROL/"requests.sqlite3").snapshot() if (CONTROL/"requests.sqlite3").exists() else {"count":0,"maximum":5,"started":False}
+        recovery=LiveBudget(CONTROL/"recovery-requests.sqlite3").snapshot() if (CONTROL/"recovery-requests.sqlite3").exists() else None
+        value={"initial":initial,"recovery":recovery,"cumulative_count":initial["count"]+(recovery["count"] if recovery else 0),
+               "cumulative_maximum":5}
     else:
         if not args.live: parser.error("--live is required; no requests sent")
-        if args.phase == "prepare" and not args.container_evidence: parser.error("--container-evidence is required")
+        if args.phase in ("prepare","recover") and not args.container_evidence: parser.error("--container-evidence is required")
         if args.phase == "solve" and not args.confirm: parser.error("--confirm is required after actual-region user review")
         config=Config.from_env()
-        value=prepare(config,args.container_evidence) if args.phase == "prepare" else solve(config,args.confirm)
+        value=(prepare(config,args.container_evidence) if args.phase == "prepare"
+               else recover(config,args.container_evidence) if args.phase == "recover"
+               else solve(config,args.confirm))
     print(json.dumps(value,indent=2))
 
 

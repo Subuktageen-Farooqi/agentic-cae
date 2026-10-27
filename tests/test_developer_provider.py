@@ -11,6 +11,7 @@ from providers.vertex import ImagePayload, ProviderUnavailable
 
 def test_developer_uses_key_not_adc_and_disables_sdk_retries(monkeypatch):
     from google import genai
+    from agents.advisor import AdvisorModelResponse
     observed = {}
     response = SimpleNamespace(text='{"ok":true}', usage_metadata=SimpleNamespace(total_token_count=17))
     class Client:
@@ -21,13 +22,15 @@ def test_developer_uses_key_not_adc_and_disables_sdk_retries(monkeypatch):
     config = Config.from_env({"LLM_PROVIDER":"gemini_developer", "GEMINI_API_KEY":"private-test-value", "GEMINI_MODEL_ID":"test"})
     provider = make_provider(config)
     result = provider.generate(system_instruction="JSON", prompt="Inspect", images=[
-        ImagePayload(b"actual-image-bytes", "image/png", "desired_reference", "sketch")])
+        ImagePayload(b"actual-image-bytes", "image/png", "desired_reference", "sketch")],
+        response_schema=AdvisorModelResponse)
     assert json.loads(result)["ok"]
     assert observed["vertexai"] is False and observed["api_key"] == config.gemini_api_key
     assert "project" not in observed and "location" not in observed
     assert observed["http_options"].retry_options.attempts == 1
     assert observed["request"]["contents"][-1].inline_data.data == b"actual-image-bytes"
     assert observed["request"]["config"].response_mime_type == "application/json"
+    assert observed["request"]["config"].response_schema is AdvisorModelResponse
     assert provider.last_usage["total_token_count"] == 17 and observed["closed"]
     assert config.gemini_api_key not in repr(config)
     assert config.gemini_api_key not in json.dumps(diagnostics(config))

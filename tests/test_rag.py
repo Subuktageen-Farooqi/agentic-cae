@@ -77,14 +77,29 @@ def test_simple_dimension_edit_skips_retrieval_but_engineering_decision_uses_it(
     assert should_retrieve("Should I use a welded joint or fasteners?")
 
 
+def test_advisor_wire_schema_transforms_for_sdk_and_host_rejects_bad_dimensions():
+    """Local schema/contract check; no model call or synthetic integration claim."""
+    from google.genai import _transformers
+    from agents.advisor import AdvisorModelResponse, AdvisorReply
+    from pydantic import ValidationError
+    schema = _transformers.t_schema(None, AdvisorModelResponse)
+    assert schema.properties["source_chunk_ids"].type.value == "ARRAY"
+    assert schema.properties["visual_observations"].type.value == "ARRAY"
+    wire = AdvisorModelResponse.model_validate({"text": "Candidate", "dimension_updates": [
+        {"name": "length", "value": -1, "unit": "mm", "origin": "inferred"}]})
+    with pytest.raises(ValidationError):
+        AdvisorReply.model_validate({**wire.model_dump(exclude={"source_chunk_ids"}), "sources": []})
+
+
 class FakeProvider:
     def __init__(self, source_id):
         self.source_id = source_id
         self.prompt = None
         self.images = None
 
-    def generate(self, *, system_instruction, prompt, images=()):
+    def generate(self, *, system_instruction, prompt, images=(), response_schema=None):
         self.prompt, self.images = prompt, images
+        assert response_schema.__name__ == "AdvisorModelResponse"
         return json.dumps({"text": "Consider tool access and service needs.",
                            "questions": ["Must the joint be removable?"],
                            "proposed_choices": ["Use a removable bolted joint"],

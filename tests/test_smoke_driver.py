@@ -32,3 +32,35 @@ def test_cantilever_comparison_rejects_wrong_volume_or_dimensions():
         bounding_box=BoundingBox(minimum=(0,-10,-5),maximum=(100,10,5)),evidence_path="unit")
     assert_rectangular_metrics(metrics)
     with pytest.raises(ValueError): assert_rectangular_metrics(metrics.model_copy(update={"volume_mm3":19000}))
+
+
+def test_recovery_keeps_original_ledger_and_project_when_preflight_blocks(monkeypatch,tmp_path):
+    """Local state only; no model response, transport or generated-code execution."""
+    import json
+    from examples import live_smoke
+    from providers.budget import LiveBudget
+    from storage import Store
+    from schemas import Intake, ChatMessage, WorkflowState as S
+    from app_logic import draft_brief
+    from workflow import Workflow
+    control=tmp_path/"control"; control.mkdir()
+    monkeypatch.setattr(live_smoke,"CONTROL",control)
+    store=Store(tmp_path/"data")
+    project_id=store.create_project(Intake(idea="Local recovery gate"))
+    flow=Workflow(store)
+    flow.transition(project_id,S.ROUTE_SELECTION,expected_version=store.project(project_id)["row_version"],reason="test")
+    brief=store.save_brief(project_id,draft_brief(store.original_intake(project_id),automatic=False),
+        expected_version=0,actor="test",reason="test")
+    flow.transition(project_id,S.ADVISOR_CHAT,route="advisor",expected_version=store.project(project_id)["row_version"],reason="test")
+    user=ChatMessage(role="user",text="Explain the material choice",brief_version=brief.version)
+    store.save_record(project_id,user.message_id,1,user)
+    live_smoke.write_once(control/"project.json",{"project_id":project_id,"data_dir":str(store.root)})
+    original=LiveBudget.create(control/"requests.sqlite3")
+    with original.connection() as db:
+        db.execute("INSERT INTO requests VALUES (1,'advisor','returned','{}')")
+    original.stop()
+    before=original.snapshot()
+    with pytest.raises(RuntimeError,match="Configure Developer API"):
+        live_smoke.recover(Config.from_env({}),"missing-evidence.json")
+    assert original.snapshot()==before and not (control/"recovery-requests.sqlite3").exists()
+    assert Store(store.root).record(project_id,"ChatMessage",user.message_id,1)==user
