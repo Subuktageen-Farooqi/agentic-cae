@@ -288,7 +288,10 @@ def main():
     if args.phase == "status":
         initial=LiveBudget(CONTROL/"requests.sqlite3").snapshot() if (CONTROL/"requests.sqlite3").exists() else {"count":0,"maximum":5,"started":False}
         recovery=LiveBudget(CONTROL/"recovery-requests.sqlite3").snapshot() if (CONTROL/"recovery-requests.sqlite3").exists() else None
-        value={"initial":initial,"recovery":recovery,"cumulative_count":initial["count"]+(recovery["count"] if recovery else 0),
+        continuation=LiveBudget(CONTROL/"second-recovery-requests.sqlite3").snapshot() if (CONTROL/"second-recovery-requests.sqlite3").exists() else None
+        bracket=LiveBudget(CONTROL/"bracket-requests.sqlite3").snapshot() if (CONTROL/"bracket-requests.sqlite3").exists() else None
+        value={"initial":initial,"recovery":recovery,"continuation":continuation,"bracket":bracket,
+               "cumulative_count":sum(item["count"] for item in (initial,recovery,continuation,bracket) if item),
                "cumulative_maximum":5}
     else:
         if not args.live: parser.error("--live is required; no requests sent")

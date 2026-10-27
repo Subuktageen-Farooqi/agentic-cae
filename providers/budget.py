@@ -67,8 +67,10 @@ class LiveBudget:
                     "count": len(rows), "stopped": bool(gate[0]),
                     "requests": [{"number": n, "role": r, "status": s, "usage": json.loads(u) if u else None} for n,r,s,u in rows]}
 
-    def wrap(self, provider):
+    def wrap(self, provider, *, roles=ROLES):
         budget = self
+        if len(roles) < self.snapshot()["maximum"]:
+            raise ValueError("Every permitted live request needs a named role")
         class GuardedProvider:
             def availability_issues(self):
                 return provider.availability_issues()
@@ -81,7 +83,7 @@ class LiveBudget:
                     if gate[0] or len(rows) >= maximum or any(r[0] != "returned" for r in rows):
                         raise ProviderUnavailable("Live request budget stopped, exhausted or has an uncertain outcome; no request sent")
                     number = len(rows) + 1
-                    db.execute("INSERT INTO requests VALUES (?,?,?,NULL)", (number, ROLES[number-1], "reserved"))
+                    db.execute("INSERT INTO requests VALUES (?,?,?,NULL)", (number, roles[number-1], "reserved"))
                 try:
                     response = provider.generate(**kwargs)
                 except BaseException:

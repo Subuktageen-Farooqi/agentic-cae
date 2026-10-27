@@ -82,6 +82,12 @@ A second saved-project continuation is prepared but **must not run without a new
 
 If the user instead wants a live AI analysis-planning call as well, the cumulative generation cap must be explicitly raised from five to six before any new call. Never infer that approval from a Codex/model usage reset.
 
+## Separate user-directed three-way corner-bracket CAD run
+
+The user later authorized three remaining Gemini requests for an automatic-route bracket. Through the real Streamlit intake, the exact prompt `make a threeway corner bracket` was saved; both route choices were displayed, and **Draft automatically** was selected. Gemini returned a validated DesignSpec (inferred 50 mm X/Y/Z extents and 5 mm thickness) and CAD source using two requests. The first generated container job failed on CadQuery 2.6.1 `box(center=...)`. One explicit, audited manual correction used `box().translate()` and smaller blind holes, consumed the revision's single technical repair, and reran the corrected source only in the restricted Podman container. STEP/STL and FreeCAD FCStd were produced and hash-verified, all mandatory geometry checks passed, and the app displayed the real STL. FreeCAD GUI was opened on the FCStd. The bracket remains in DESIGN_REVIEW; **no bracket FEM solve or report** was produced, and the manually corrected result is not claimed as first-pass Gemini code. The third authorized new Gemini request was not used. See [STATUS.md](./STATUS.md) for project/revision IDs, the saved local output paths, numerical geometry metrics and cumulative usage.
+
+This bracket CAD task does not complete the earlier cantilever advisor-to-FEM smoke journey, whose failed/stopped ledgers and projects remain intact.
+
 ## Prepare, then wait for the user's confirmation
 
 Run ordinary tests first; they consume no live quota:
