@@ -11,3 +11,5 @@
 ## Learnings
 
 FreeCAD/OpenCASCADE native STEP, STL and FCStd operations can fail on long Windows paths even when Python and `Store` accept extended paths; the native STL writer can return without producing a file. Use short private staging directories for native CAD/FEM IO, verify actual nonempty outputs, then publish them back through Python without overwriting revision artifacts. For example, export `preview.stl` in the staging directory rather than directly in a deep project/attempt/revision tree; retain the original artifact paths and hashes in manifests. The long-path pipeline regression test in [tests/test_generation.py](./tests/test_generation.py) covers the CAD/FreeCAD boundary.
+
+FreeCAD GUI may rewrite an FCStd simply by saving an opened document, invalidating the hash recorded for that immutable generated artifact. For demos or edits, open a copy of the FCStd outside the revision artifact path; preserve and verify the original manifest-bound bytes.

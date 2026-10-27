@@ -50,6 +50,8 @@ Tested versions are recorded in [STATUS.md](./STATUS.md); the uv lockfile pins r
 
 ## Continue on another PC
 
+For an actual move of the existing sessions and generated CAD, follow [HANDOFF.md](./HANDOFF.md). GitHub contains the application source, while the ignored SQLite database, project artifacts and live-call ledgers need a separate private transfer. The saved bracket STL is viewable in the app after restore; the normal application saves an FCStd and shows the STL in the browser but does not automatically launch FreeCAD GUI. Open a **copy** of the FCStd in FreeCAD to preserve the hash of the original artifact. No packaged executable exists; launch the Streamlit command below.
+
 ```powershell
 git clone https://github.com/Subuktageen-Farooqi/agentic-cae
 Set-Location agentic-cae
