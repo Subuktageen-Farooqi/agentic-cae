@@ -68,6 +68,20 @@ Offline diagnosis found that JSON MIME was set without an SDK response schema. T
 
 Recovery refuses to modify the original stopped ledger, creates a separate maximum-four-request ledger, resends the preserved image and retrieved knowledge for one advisor request, then allocates one request each to the design spec, CAD code and analysis spec. It does not rerun intake, use mocked model responses, automatically repair CAD, or consume an extra explanation call. Across both ledgers the hard maximum remains **five requests**. If any stage fails, stop again and diagnose offline before seeking another allowance.
 
+## Second frontend attempt and current gate
+
+After the user authorized up to four further calls, a separate frontend-driven journey entered the intent and PNG through the real Streamlit intake, displayed both Brainstorm and Trust AI routes, and selected Brainstorm. Project `55a049e2f8d647928fdac6b1da9ae309` preserves this intake, image and route. Its first real advisor request failed before returning content; `.tools/live-smoke/recovery-requests.sqlite3` records one failed request with no token metadata and is stopped. The app displayed an explicitly labeled local-retrieval fallback, which is not Gemini output. No model-generated CAD, new FEM setup or report resulted. The two immutable ledgers together show **two attempted requests**; the exact SDK failure cannot be reconstructed from the sanitized exception.
+
+The API wire schema was simplified offline, while the host still validates all typed brief updates. Future SDK failures now record only a safe numeric HTTP status, never a key, URL, prompt or raw response. The changed modules compile; at the user's request the offline pytest suite was skipped for this follow-up. This is not evidence of another successful Gemini response.
+
+A second saved-project continuation is prepared but **must not run without a new explicit allowance**. The recommended allowance is at most **three** real calls: advisor, design specification and CAD code. It keeps the cumulative limit at **five**. The same frontend project's validated manual steel/100 N/3 mm analysis form will then produce the AnalysisSpec without a Gemini call, prepare actual faces and pause for user confirmation. This path does not live-test AI analysis recommendations or an AI report explanation. Once the user authorizes that specific tradeoff, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m examples.ui_live_smoke continue --live
+```
+
+If the user instead wants a live AI analysis-planning call as well, the cumulative generation cap must be explicitly raised from five to six before any new call. Never infer that approval from a Codex/model usage reset.
+
 ## Prepare, then wait for the user's confirmation
 
 Run ordinary tests first; they consume no live quota:

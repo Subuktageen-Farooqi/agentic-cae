@@ -4,7 +4,7 @@ Required product work is tracked in [PLAN.md](./PLAN.md) and [REQUIREMENTS_CHECK
 
 All future solver work uses FreeCAD FEM with Gmsh and CalculiX. The application's executable analysis scope remains linear static; other workbench/solver capabilities do not automatically make additional analysis types supported here.
 
-M8 analysis advising and input collection are implemented with offline provider doubles. The real quota-free Podman/CadQuery/FreeCAD container job passed. The first real Developer API advisor request returned but failed contract validation; its stopped ledger and saved project remain intact. Complete the assisted journey only after a new maximum-four-request allowance, preserving a cumulative maximum of five calls. See [LIVE_SMOKE.md](./LIVE_SMOKE.md) and [STATUS.md](./STATUS.md); mocked provider tests do not count as live verification.
+M8 analysis advising and input collection are implemented with offline provider doubles. The real quota-free Podman/CadQuery/FreeCAD container job passed. The first real Developer API advisor reply failed validation and a second request from the frontend failed before content; both stopped ledgers and saved projects remain intact. Complete the assisted journey only after a fresh user budget. A maximum-three-call path preserves the cumulative five-call cap by using validated manual FEM analysis intake. See [LIVE_SMOKE.md](./LIVE_SMOKE.md) and [STATUS.md](./STATUS.md); mocked provider tests do not count as live verification.
 
 ## Unrelated improvements
 

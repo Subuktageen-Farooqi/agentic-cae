@@ -38,6 +38,7 @@ class VertexGeminiProvider:
         self.config = config
         self._client = client
         self.last_usage = None
+        self.last_http_status = None
 
     def _new_client(self, genai, types):
         return genai.Client(vertexai=True, project=self.config.google_project,
@@ -82,6 +83,7 @@ class VertexGeminiProvider:
         client = self._client
         try:
             self.last_usage = None
+            self.last_http_status = None
             client = self._client or self._new_client(genai, types)
             response = client.models.generate_content(
                 model=self.config.gemini_model_id,
@@ -90,10 +92,13 @@ class VertexGeminiProvider:
                     system_instruction=system_instruction, temperature=0.2,
                     response_mime_type="application/json", response_schema=response_schema),
             )
-        except Exception:
+        except Exception as error:
             # SDK exceptions may include request URLs/headers, credentials or input.
-            # Do not chain, persist, or display those exceptions.
-            raise ProviderUnavailable("Gemini request failed; check local credentials, model access and quota. No automatic retry was made.") from None
+            # Record only a numeric HTTP status, never the SDK body or key.
+            code = getattr(error, "code", None)
+            self.last_http_status = code if type(code) is int and 400 <= code <= 599 else None
+            note = f" (HTTP {self.last_http_status})" if self.last_http_status else ""
+            raise ProviderUnavailable("Gemini request failed" + note + "; check local credentials, model access and quota. No automatic retry was made.") from None
         finally:
             if self._client is None and client is not None:
                 with suppress(Exception):

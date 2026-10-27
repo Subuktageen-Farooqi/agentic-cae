@@ -16,9 +16,13 @@ ROLES = ("advisor", "design_specification", "cad_code", "analysis_specification"
 
 def safe_usage(provider):
     usage = getattr(provider, "last_usage", None)
-    return {k: v for k, v in (usage or {}).items() if k in (
+    safe = {k: v for k, v in (usage or {}).items() if k in (
         "prompt_token_count", "candidates_token_count", "thoughts_token_count", "total_token_count")
         and (v is None or type(v) is int)}
+    code = getattr(provider, "last_http_status", None)
+    if type(code) is int and 400 <= code <= 599:
+        safe["http_status_code"] = code
+    return safe
 
 
 class LiveBudget:
@@ -66,6 +70,9 @@ class LiveBudget:
     def wrap(self, provider):
         budget = self
         class GuardedProvider:
+            def availability_issues(self):
+                return provider.availability_issues()
+
             def generate(self, **kwargs):
                 with budget.connection() as db:
                     rows = db.execute("SELECT status FROM requests ORDER BY number").fetchall()

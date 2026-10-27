@@ -49,7 +49,9 @@ class AdvisorModelResponse(Contract):
     # exclusiveMinimum. The authoritative Dimension validator still runs
     # when this wire response becomes AdvisorReply below.
     dimension_updates: list[dict] = Field(default_factory=list)
-    brief_updates: BriefUpdates = Field(default_factory=BriefUpdates)
+    # Avoid a deeply branching schema of optional brief fields at the API
+    # boundary. AdvisorReply validates the complete typed patch afterward.
+    brief_updates: dict = Field(default_factory=dict)
     mode: str = "gemini_grounded"
 
 
